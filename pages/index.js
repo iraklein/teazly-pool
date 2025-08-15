@@ -449,6 +449,14 @@ const handleTestWeekDetection = () => {
     }
   };
 
+  // admin function to test week detection
+  <button
+  onClick={handleTestWeekDetection}
+  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+>
+  Test Week Detection
+</button>
+
   // Admin function to clear pick deadline
   const handleClearPickDeadline = async () => {
     if (!currentWeek) return;
