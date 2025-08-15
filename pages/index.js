@@ -926,19 +926,18 @@ const handleInitializeWeekSystem = async () => {
         {currentView === 'picks' && (
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow border">
-              <div className="p-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold">
-                  <h2 className="text-lg font-semibold">
-  {currentWeek?.week_name ? (
-    currentWeek.season_type === 'preseason' ? `Preseason Week ${currentWeek.week_number}` :
-    currentWeek.season_type === 'playoffs' ? currentWeek.week_name :
-    `Week ${currentWeek.week_number}`
-  ) : 'N/A'} - 4-Team Teaser (+14 Points)
-</h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Pick 4 teams. All must win (with 14-point tease) to win the week.
-                </p>
-              </div>
+<div className="p-4 border-b border-gray-200">
+  <h2 className="text-lg font-semibold">
+    {currentWeek?.week_name ? (
+      currentWeek.season_type === 'preseason' ? `Preseason Week ${currentWeek.week_number}` :
+      currentWeek.season_type === 'playoffs' ? currentWeek.week_name :
+      `Week ${currentWeek.week_number}`
+    ) : 'N/A'} - 4-Team Teaser (+14 Points)
+  </h2>
+  <p className="text-sm text-gray-600 mt-1">
+    Pick 4 teams. All must win (with 14-point tease) to win the week.
+  </p>
+</div>
               
               <div className="p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
