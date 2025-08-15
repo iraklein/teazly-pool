@@ -38,6 +38,7 @@ const TeazlyPool = () => {
   const [picks, setPicks] = useState([]);
   const [standings, setStandings] = useState([]);
   const [userPicks, setUserPicks] = useState({ pick1: '', pick2: '', pick3: '', pick4: '' });
+  const [currentUserProfile, setCurrentUserProfile] = useState(null);
 
   // Helper function to round game times to normal NFL start times
   const roundToNormalGameTime = (apiTime) => {
@@ -93,6 +94,7 @@ const TeazlyPool = () => {
     if (user) {
       loadCurrentWeek();
       loadStandings();
+      loadUserProfile();
     }
   }, [user]);
 
@@ -145,6 +147,16 @@ const TeazlyPool = () => {
       .order('total_winnings', { ascending: false });
 
     setStandings(users || []);
+  };
+
+  const loadUserProfile = async () => {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    setCurrentUserProfile(profile);
   };
 
   // NFL API Integration Function with Preseason Support
@@ -557,15 +569,15 @@ const TeazlyPool = () => {
               
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                 <div className="font-medium text-purple-800">
-                  ${user && standings.find(s => s.id === user.id)?.total_winnings >= 0 ? '+' : ''}
-                  {user && standings.find(s => s.id === user.id)?.total_winnings || 0}
+                  ${currentUserProfile?.total_winnings >= 0 ? '+' : ''}
+                  {currentUserProfile?.total_winnings || 0}
                 </div>
                 <p className="text-sm text-purple-600 mt-1">Your Net Win/Loss</p>
               </div>
             </div>
 
-            {/* Admin Actions Section */}
-            {currentWeek && (
+            {/* Admin Actions Section - Only for Admins */}
+            {currentWeek && currentUserProfile?.is_admin && (
               <div className="bg-white rounded-lg shadow border">
                 <div className="p-4 border-b border-gray-200">
                   <h3 className="text-lg font-semibold">Admin Actions</h3>
