@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
 
 const TeazlyPool = () => {
+  const router = useRouter();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState('dashboard');
@@ -10,6 +12,20 @@ const TeazlyPool = () => {
   const [picks, setPicks] = useState([]);
   const [standings, setStandings] = useState([]);
   const [userPicks, setUserPicks] = useState({ pick1: '', pick2: '', pick3: '', pick4: '' });
+
+  // Handle URL routing
+  useEffect(() => {
+    const { view } = router.query;
+    if (view && ['dashboard', 'picks', 'scoring'].includes(view)) {
+      setCurrentView(view);
+    }
+  }, [router.query]);
+
+  // Navigation function that updates URL
+  const navigateTo = (view) => {
+    setCurrentView(view);
+    router.push(`/?view=${view}`, undefined, { shallow: true });
+  };
 
   // Simple authentication state - back to working version
   useEffect(() => {
@@ -441,7 +457,7 @@ const TeazlyPool = () => {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-8">
             <button
-              onClick={() => setCurrentView('dashboard')}
+              onClick={() => navigateTo('dashboard')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 currentView === 'dashboard' 
                   ? 'border-blue-500 text-blue-600' 
@@ -451,7 +467,7 @@ const TeazlyPool = () => {
               Dashboard
             </button>
             <button
-              onClick={() => setCurrentView('picks')}
+              onClick={() => navigateTo('picks')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 currentView === 'picks' 
                   ? 'border-blue-500 text-blue-600' 
@@ -461,7 +477,7 @@ const TeazlyPool = () => {
               Make Picks
             </button>
             <button
-              onClick={() => setCurrentView('scoring')}
+              onClick={() => navigateTo('scoring')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 currentView === 'scoring' 
                   ? 'border-blue-500 text-blue-600' 
