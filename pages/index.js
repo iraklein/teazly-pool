@@ -123,19 +123,20 @@ const handleUpdateCurrentWeek = async () => {
       
       alert(`✅ Updated existing week to: ${detectedWeek.week_name}`);
     } else {
-      // Create new week
-      const { error } = await supabase
-        .from('weeks')
-        .insert({
-          week_number: detectedWeek.week_number,
-          season_type: detectedWeek.season_type,
-          week_name: detectedWeek.week_name,
-          year: 2025,
-          picks_locked: false,
-          is_current: true,
-          pick_count: 4,
-          tease_points: 14
-        });
+// Create new week with default deadline
+const { error } = await supabase
+  .from('weeks')
+  .insert({
+    week_number: detectedWeek.week_number,
+    season_type: detectedWeek.season_type,
+    week_name: detectedWeek.week_name,
+    year: 2025,
+    picks_locked: false,
+    is_current: true,
+    pick_count: 4,
+    tease_points: 14,
+    pick_deadline: '2025-08-18 17:00:00+00'  // Default Sunday 10am PT deadline
+  });
       
       if (error) {
         console.error('Error creating new week:', error);
