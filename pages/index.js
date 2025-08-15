@@ -11,80 +11,11 @@ const TeazlyPool = () => {
   const [standings, setStandings] = useState([]);
   const [userPicks, setUserPicks] = useState({ pick1: '', pick2: '', pick3: '', pick4: '' });
 
-  // Helper function to check/fix existing user ID mismatches
-  const ensureUserProfileExists = async (authUser) => {
-    if (!authUser) return;
-
-    try {
-      // Check if user exists in users table with correct ID
-      const { data: existingUser, error: fetchError } = await supabase
-        .from('users')
-        .select('id, email')
-        .eq('id', authUser.id)
-        .single();
-
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        // PGRST116 is "not found" error, which is expected for new users
-        console.error('Error checking user profile:', fetchError);
-        return;
-      }
-
-      if (!existingUser) {
-        // User doesn't exist in users table, check if they exist with different ID
-        const { data: userByEmail } = await supabase
-          .from('users')
-          .select('id, email')
-          .eq('email', authUser.email)
-          .single();
-
-        if (userByEmail && userByEmail.id !== authUser.id) {
-          // User exists but with wrong ID - update it
-          console.log('Fixing user ID mismatch...');
-          const { error: updateError } = await supabase
-            .from('users')
-            .update({ id: authUser.id })
-            .eq('email', authUser.email);
-
-          if (updateError) {
-            console.error('Failed to fix user ID:', updateError);
-          } else {
-            console.log('User ID fixed successfully');
-          }
-        } else if (!userByEmail) {
-          // User doesn't exist at all - create them
-          console.log('Creating missing user profile...');
-          const { error: createError } = await supabase.from('users').insert({
-            id: authUser.id,
-            email: authUser.email,
-            username: authUser.email.split('@')[0], // Use email prefix as default username
-            full_name: authUser.email,
-            is_admin: false,
-            total_winnings: 0
-          });
-
-          if (createError) {
-            console.error('Failed to create user profile:', createError);
-          } else {
-            console.log('User profile created successfully');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error in ensureUserProfileExists:', error);
-    }
-  };
-
-  // Authentication state
+  // Simple authentication state - like the original working version
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
-      
-      // Fix any user ID mismatches
-      if (user) {
-        await ensureUserProfileExists(user);
-      }
-      
       setLoading(false);
     };
 
@@ -94,12 +25,6 @@ const TeazlyPool = () => {
       async (event, session) => {
         const user = session?.user || null;
         setUser(user);
-        
-        // Fix any user ID mismatches when user signs in
-        if (user && event === 'SIGNED_IN') {
-          await ensureUserProfileExists(user);
-        }
-        
         setLoading(false);
       }
     );
@@ -126,29 +51,29 @@ const TeazlyPool = () => {
 
     if (week) {
       setCurrentWeek(week);
-      loadGames(week.week_number); // Use week_number instead of week.id
-      loadUserPicks(week.week_number); // Use week_number instead of week.id
+      loadGames(week.week_number);
+      loadUserPicks(week.week_number);
     }
   };
 
-  // Load games for current week using week_number
+  // Load games for current week
   const loadGames = async (weekNumber) => {
     const { data: games } = await supabase
       .from('games')
       .select('*')
-      .eq('week_number', weekNumber) // Use week_number instead of week_id
+      .eq('week_number', weekNumber)
       .order('game_date');
 
     setGames(games || []);
   };
 
-  // Load user's picks for current week using week_number
+  // Load user's picks for current week
   const loadUserPicks = async (weekNumber) => {
     const { data: picks } = await supabase
       .from('picks')
       .select('*')
       .eq('user_id', user.id)
-      .eq('week_number', weekNumber) // Use week_number instead of week_id
+      .eq('week_number', weekNumber)
       .order('pick_number');
 
     const pickMap = { pick1: '', pick2: '', pick3: '', pick4: '' };
@@ -167,55 +92,35 @@ const TeazlyPool = () => {
     setStandings(users || []);
   };
 
-  // Updated signup function with proper ID handling
+  // Simple signup function
   const signUp = async (email, password, username, fullName) => {
-    try {
-      // First, create the auth user
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) return { data, error };
+
+    if (data.user) {
+      // Create user profile
+      const { error: profileError } = await supabase.from('users').insert({
+        id: data.user.id,
+        email: email,
+        username: username,
+        full_name: fullName,
+        is_admin: false,
+        total_winnings: 0
       });
 
-      if (error) {
-        console.error('Auth signup error:', error);
-        return { data, error };
+      if (profileError) {
+        return { 
+          data: null, 
+          error: { message: `Profile creation failed: ${profileError.message}` } 
+        };
       }
-
-      if (data.user) {
-        console.log('Auth user created with ID:', data.user.id);
-        
-        // Create user profile with the EXACT same ID as the auth user
-        const { error: profileError } = await supabase.from('users').insert({
-          id: data.user.id, // Use the auth user ID exactly
-          email: email,
-          username: username,
-          full_name: fullName,
-          is_admin: false,
-          total_winnings: 0
-        });
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-          
-          return { 
-            data: null, 
-            error: { 
-              message: `Account creation failed: ${profileError.message}. Please try again with a different username.` 
-            } 
-          };
-        }
-
-        console.log('User profile created successfully');
-      }
-
-      return { data, error };
-    } catch (unexpectedError) {
-      console.error('Unexpected signup error:', unexpectedError);
-      return { 
-        data: null, 
-        error: { message: 'An unexpected error occurred. Please try again.' } 
-      };
     }
+
+    return { data, error };
   };
 
   const signIn = async (email, password) => {
@@ -226,7 +131,7 @@ const TeazlyPool = () => {
     await supabase.auth.signOut();
   };
 
-  // Pick submission using week_number
+  // Pick submission
   const submitPicks = async () => {
     if (!currentWeek || !user) return;
 
@@ -234,7 +139,7 @@ const TeazlyPool = () => {
       .filter(([_, team]) => team)
       .map(([pickKey, team], index) => ({
         user_id: user.id,
-        week_number: currentWeek.week_number, // Use week_number instead of week_id
+        week_number: currentWeek.week_number,
         game_id: games.find(g => g.home_team === team || g.away_team === team)?.id,
         picked_team: team,
         pick_number: parseInt(pickKey.replace('pick', '')),
@@ -245,7 +150,7 @@ const TeazlyPool = () => {
       .from('picks')
       .delete()
       .eq('user_id', user.id)
-      .eq('week_number', currentWeek.week_number); // Use week_number instead of week_id
+      .eq('week_number', currentWeek.week_number);
 
     // Insert new picks
     const { error } = await supabase.from('picks').insert(pickEntries);
