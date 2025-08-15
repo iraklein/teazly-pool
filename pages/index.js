@@ -111,40 +111,62 @@ const handleInitializeWeekSystem = async () => {
     const currentWeekInfo = getCurrentNFLWeek();
     console.log('Current NFL week:', currentWeekInfo);
     
-    // Mark all weeks as not current
+    // First, set all existing weeks to not current
     await supabase
       .from('weeks')
       .update({ is_current: false })
-      .neq('id', '00000000-0000-0000-0000-000000000000');
+      .neq('week_number', currentWeekInfo.week_number)
+      .neq('season_type', currentWeekInfo.season_type);
     
-    // Create or update current week
-    const { data: newWeek, error } = await supabase
+    // Check if this specific week already exists
+    const { data: existingWeek } = await supabase
       .from('weeks')
-      .upsert({
-        week_number: currentWeekInfo.week_number,
-        season_type: currentWeekInfo.season_type,
-        week_name: currentWeekInfo.week_name,
-        year: 2025,
-        picks_locked: false,
-        is_current: true,
-        pick_count: 4,
-        tease_points: 14
-      }, {
-        onConflict: 'week_number,season_type',
-        ignoreDuplicates: false
-      })
-      .select()
+      .select('*')
+      .eq('week_number', currentWeekInfo.week_number)
+      .eq('season_type', currentWeekInfo.season_type)
       .single();
     
-    if (error) {
-      console.error('Error creating week:', error);
-      alert(`Error creating week: ${error.message}`);
-      return;
+    if (existingWeek) {
+      // Update existing week to be current
+      const { error } = await supabase
+        .from('weeks')
+        .update({ 
+          is_current: true,
+          week_name: currentWeekInfo.week_name
+        })
+        .eq('id', existingWeek.id);
+      
+      if (error) {
+        console.error('Error updating existing week:', error);
+        alert(`Error updating week: ${error.message}`);
+        return;
+      }
+      
+      console.log('Updated existing week to current');
+    } else {
+      // Create new week
+      const { error } = await supabase
+        .from('weeks')
+        .insert({
+          week_number: currentWeekInfo.week_number,
+          season_type: currentWeekInfo.season_type,
+          week_name: currentWeekInfo.week_name,
+          year: 2025,
+          picks_locked: false,
+          is_current: true,
+          pick_count: 4,
+          tease_points: 14
+          // Don't include pick_deadline - let it be null
+        });
+      
+      if (error) {
+        console.error('Error creating new week:', error);
+        alert(`Error creating week: ${error.message}`);
+        return;
+      }
+      
+      console.log('Created new current week');
     }
-    
-    // Load games for current week type
-    const gameType = currentWeekInfo.season_type === 'preseason' ? 'preseason' : 'regular';
-    await handleLoadPreseasonGames(); // This will load the games
     
     // Reload local data
     await loadCurrentWeek();
