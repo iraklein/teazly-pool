@@ -92,14 +92,15 @@ const TeazlyPool = () => {
     setStandings(users || []);
   };
 
-  // NFL API Integration Function
-  const loadNFLGames = async (weekNumber) => {
+  // NFL API Integration Function with Preseason Support
+  const loadNFLGames = async (weekNumber, gameType = 'regular') => {
     try {
-      console.log('Loading NFL games for week', weekNumber);
+      const sportKey = gameType === 'preseason' ? 'americanfootball_nfl_preseason' : 'americanfootball_nfl';
+      console.log(`Loading NFL ${gameType} games for week`, weekNumber);
       
       // Fetch games from The Odds API
       const response = await fetch(
-        `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds?regions=us&markets=spreads&oddsFormat=american&apiKey=${process.env.NEXT_PUBLIC_ODDS_API_KEY}`
+        `https://api.the-odds-api.com/v4/sports/${sportKey}/odds?regions=us&markets=spreads&oddsFormat=american&apiKey=${process.env.NEXT_PUBLIC_ODDS_API_KEY}`
       );
       
       if (!response.ok) {
@@ -107,7 +108,7 @@ const TeazlyPool = () => {
       }
       
       const gamesData = await response.json();
-      console.log('Fetched games from API:', gamesData.length);
+      console.log(`Fetched ${gameType} games from API:`, gamesData.length);
       
       // Transform API data to your database format
       const gamesToInsert = gamesData.map(game => {
@@ -153,30 +154,43 @@ const TeazlyPool = () => {
         throw error;
       }
       
-      console.log('Successfully loaded', gamesToInsert.length, 'games');
+      console.log(`Successfully loaded ${gamesToInsert.length} ${gameType} games`);
       return gamesToInsert;
       
     } catch (error) {
-      console.error('Error loading NFL games:', error);
+      console.error(`Error loading NFL ${gameType} games:`, error);
       throw error;
     }
   };
 
-  // Admin function to manually load games
-  const handleLoadGames = async () => {
+  // Admin functions to load different game types
+  const handleLoadRegularSeasonGames = async () => {
     if (!currentWeek) {
       alert('Please create a current week first');
       return;
     }
     
     try {
-      const games = await loadNFLGames(currentWeek.week_number);
-      alert(`Successfully loaded ${games.length} NFL games!`);
-      
-      // Reload games to show in UI
+      const games = await loadNFLGames(currentWeek.week_number, 'regular');
+      alert(`Successfully loaded ${games.length} regular season games!`);
       loadGames(currentWeek.week_number);
     } catch (error) {
-      alert(`Error loading games: ${error.message}`);
+      alert(`Error loading regular season games: ${error.message}`);
+    }
+  };
+
+  const handleLoadPreseasonGames = async () => {
+    if (!currentWeek) {
+      alert('Please create a current week first');
+      return;
+    }
+    
+    try {
+      const games = await loadNFLGames(currentWeek.week_number, 'preseason');
+      alert(`Successfully loaded ${games.length} preseason games!`);
+      loadGames(currentWeek.week_number);
+    } catch (error) {
+      alert(`Error loading preseason games: ${error.message}`);
     }
   };
 
@@ -493,14 +507,22 @@ const TeazlyPool = () => {
                   <h3 className="text-lg font-semibold">Admin Actions</h3>
                 </div>
                 <div className="p-4">
-                  <button
-                    onClick={handleLoadGames}
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                  >
-                    Load NFL Games for Week {currentWeek.week_number}
-                  </button>
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleLoadRegularSeasonGames}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mr-3"
+                    >
+                      Load Regular Season Games for Week {currentWeek.week_number}
+                    </button>
+                    <button
+                      onClick={handleLoadPreseasonGames}
+                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    >
+                      Load Preseason Games for Week {currentWeek.week_number}
+                    </button>
+                  </div>
                   <p className="text-sm text-gray-600 mt-2">
-                    This will fetch current NFL games and spreads from The Odds API ({games.length} games currently loaded)
+                    Choose between regular season or preseason NFL games ({games.length} games currently loaded)
                   </p>
                 </div>
               </div>
