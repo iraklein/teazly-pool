@@ -84,71 +84,35 @@ const handleTestWeekDetection = () => {
   alert(`Detected: ${detectedWeek.week_name} (${detectedWeek.season_type} week ${detectedWeek.week_number})\nAuto-detected: ${detectedWeek.detected}`);
 };
 
-// Step 2: Update database to match detected week
+// Step 3: Simple function to just toggle is_current
 const handleUpdateCurrentWeek = async () => {
   try {
     const detectedWeek = getCurrentNFLWeek();
+    console.log('Updating current week to:', detectedWeek);
     
-    console.log('Updating database to detected week:', detectedWeek);
-    
-    // First, set all weeks to not current
+    // Set all weeks to not current
     await supabase
       .from('weeks')
       .update({ is_current: false })
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Update all
+      .neq('id', '00000000-0000-0000-0000-000000000000');
     
-    // Check if a week with this week_number already exists
-    const { data: existingWeek } = await supabase
+    // Set the detected week to current
+    const { error } = await supabase
       .from('weeks')
-      .select('*')
+      .update({ is_current: true })
       .eq('week_number', detectedWeek.week_number)
-      .single();
+      .eq('season_type', detectedWeek.season_type);
     
-    if (existingWeek) {
-      // Update existing week
-      const { error } = await supabase
-        .from('weeks')
-        .update({ 
-          is_current: true,
-          season_type: detectedWeek.season_type,
-          week_name: detectedWeek.week_name
-        })
-        .eq('id', existingWeek.id);
-      
-      if (error) {
-        console.error('Error updating existing week:', error);
-        alert(`Error updating week: ${error.message}`);
-        return;
-      }
-      
-      alert(`✅ Updated existing week to: ${detectedWeek.week_name}`);
-    } else {
-// Create new week with default deadline
-const { error } = await supabase
-  .from('weeks')
-  .insert({
-    week_number: detectedWeek.week_number,
-    season_type: detectedWeek.season_type,
-    week_name: detectedWeek.week_name,
-    year: 2025,
-    picks_locked: false,
-    is_current: true,
-    pick_count: 4,
-    tease_points: 14,
-    pick_deadline: '2025-08-18 17:00:00+00'  // Default Sunday 10am PT deadline
-  });
-      
-      if (error) {
-        console.error('Error creating new week:', error);
-        alert(`Error creating week: ${error.message}`);
-        return;
-      }
-      
-      alert(`✅ Created new week: ${detectedWeek.week_name}`);
+    if (error) {
+      console.error('Error updating current week:', error);
+      alert(`Error: ${error.message}`);
+      return;
     }
     
     // Reload the page data
     await loadCurrentWeek();
+    
+    alert(`✅ Updated current week to: ${detectedWeek.week_name}`);
     
   } catch (error) {
     console.error('Error in handleUpdateCurrentWeek:', error);
