@@ -11,16 +11,10 @@ const TeazlyPool = () => {
   const [standings, setStandings] = useState([]);
   const [userPicks, setUserPicks] = useState({ pick1: '', pick2: '', pick3: '', pick4: '' });
 
-  // Simple authentication state with profile creation on login
+  // Simple authentication state - back to working version
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        // Check if user profile exists, create if missing
-        await ensureUserProfile(user);
-      }
-      
       setUser(user);
       setLoading(false);
     };
@@ -30,12 +24,6 @@ const TeazlyPool = () => {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         const user = session?.user || null;
-        
-        if (user && event === 'SIGNED_IN') {
-          // Create profile if missing when user signs in
-          await ensureUserProfile(user);
-        }
-        
         setUser(user);
         setLoading(false);
       }
@@ -45,31 +33,6 @@ const TeazlyPool = () => {
       authListener.subscription.unsubscribe();
     };
   }, []);
-
-  // Helper function to ensure user profile exists with correct ID
-  const ensureUserProfile = async (authUser) => {
-    try {
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('id', authUser.id)
-        .single();
-
-      if (!existingUser) {
-        // User profile doesn't exist, create it
-        await supabase.from('users').insert({
-          id: authUser.id, // Use the EXACT auth user ID
-          email: authUser.email,
-          username: authUser.email.split('@')[0],
-          full_name: authUser.email,
-          is_admin: false,
-          total_winnings: 0
-        });
-      }
-    } catch (error) {
-      console.error('Error ensuring user profile:', error);
-    }
-  };
 
   useEffect(() => {
     if (user) {
@@ -129,18 +92,46 @@ const TeazlyPool = () => {
     setStandings(users || []);
   };
 
-  // Fixed signup function - waits for confirmed user
+  // Simple but correct signup function
   const signUp = async (email, password, username, fullName) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    try {
+      // Create auth user
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-    if (error) return { data, error };
+      if (error) return { data, error };
 
-    // Don't create profile immediately - wait for email confirmation
-    // Profile will be created when user confirms and logs in
-    return { data, error };
+      // IMPORTANT: Use data.user.id (not data.session.user.id or anything else)
+      if (data.user && data.user.id) {
+        console.log('Creating profile with auth ID:', data.user.id);
+        
+        const { error: profileError } = await supabase.from('users').insert({
+          id: data.user.id, // This exact ID from auth signup
+          email: email,
+          username: username,
+          full_name: fullName,
+          is_admin: false,
+          total_winnings: 0
+        });
+
+        if (profileError) {
+          console.error('Profile creation failed:', profileError);
+          return { 
+            data: null, 
+            error: { message: `Profile creation failed: ${profileError.message}` } 
+          };
+        }
+        
+        console.log('Profile created successfully with ID:', data.user.id);
+      }
+
+      return { data, error };
+    } catch (error) {
+      console.error('Signup error:', error);
+      return { data: null, error: { message: 'Signup failed' } };
+    }
   };
 
   const signIn = async (email, password) => {
