@@ -1,4 +1,4 @@
-// Pick submission with deadline check
+// Pick submission with deadline checkz
   const submitPicks = async () => {
     if (!currentWeek || !user) return;
 
