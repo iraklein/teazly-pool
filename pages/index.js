@@ -92,7 +92,95 @@ const TeazlyPool = () => {
     setStandings(users || []);
   };
 
-  // Simple but correct signup function
+  // NFL API Integration Function
+  const loadNFLGames = async (weekNumber) => {
+    try {
+      console.log('Loading NFL games for week', weekNumber);
+      
+      // Fetch games from The Odds API
+      const response = await fetch(
+        `https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds?regions=us&markets=spreads&oddsFormat=american&apiKey=${process.env.NEXT_PUBLIC_ODDS_API_KEY}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+      
+      const gamesData = await response.json();
+      console.log('Fetched games from API:', gamesData.length);
+      
+      // Transform API data to your database format
+      const gamesToInsert = gamesData.map(game => {
+        // Find the spread from bookmakers (use first available)
+        let spread = null;
+        for (const bookmaker of game.bookmakers) {
+          const spreadMarket = bookmaker.markets.find(m => m.key === 'spreads');
+          if (spreadMarket && spreadMarket.outcomes.length >= 2) {
+            // Get home team spread (negative means they're favored)
+            const homeOutcome = spreadMarket.outcomes.find(o => o.name === game.home_team);
+            if (homeOutcome) {
+              spread = homeOutcome.point;
+              break;
+            }
+          }
+        }
+        
+        return {
+          id: game.id,
+          week_number: weekNumber,
+          home_team: game.home_team,
+          away_team: game.away_team,
+          spread: spread,
+          game_date: game.commence_time,
+          status: 'upcoming',
+          home_score: null,
+          away_score: null
+        };
+      });
+      
+      console.log('Transformed games:', gamesToInsert);
+      
+      // Insert games into database
+      const { data, error } = await supabase
+        .from('games')
+        .upsert(gamesToInsert, { 
+          onConflict: 'id',
+          ignoreDuplicates: false 
+        });
+      
+      if (error) {
+        console.error('Error inserting games:', error);
+        throw error;
+      }
+      
+      console.log('Successfully loaded', gamesToInsert.length, 'games');
+      return gamesToInsert;
+      
+    } catch (error) {
+      console.error('Error loading NFL games:', error);
+      throw error;
+    }
+  };
+
+  // Admin function to manually load games
+  const handleLoadGames = async () => {
+    if (!currentWeek) {
+      alert('Please create a current week first');
+      return;
+    }
+    
+    try {
+      const games = await loadNFLGames(currentWeek.week_number);
+      alert(`Successfully loaded ${games.length} NFL games!`);
+      
+      // Reload games to show in UI
+      loadGames(currentWeek.week_number);
+    } catch (error) {
+      alert(`Error loading games: ${error.message}`);
+    }
+  };
+
+  // Simple signup function - just for auth, profile created separately
   const signUp = async (email, password, username, fullName) => {
     try {
       // Create auth user
@@ -397,6 +485,26 @@ const TeazlyPool = () => {
                 <p className="text-sm text-purple-600 mt-1">Leader Total</p>
               </div>
             </div>
+
+            {/* Admin Actions Section */}
+            {currentWeek && (
+              <div className="bg-white rounded-lg shadow border">
+                <div className="p-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold">Admin Actions</h3>
+                </div>
+                <div className="p-4">
+                  <button
+                    onClick={handleLoadGames}
+                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                  >
+                    Load NFL Games for Week {currentWeek.week_number}
+                  </button>
+                  <p className="text-sm text-gray-600 mt-2">
+                    This will fetch current NFL games and spreads from The Odds API ({games.length} games currently loaded)
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
