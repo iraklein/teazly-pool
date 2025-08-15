@@ -709,11 +709,18 @@ const handleTestWeekDetection = () => {
                       Load Regular Season Games for Week {currentWeek.week_number}
                     </button>
                     <button
-                      onClick={handleLoadPreseasonGames}
-                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                    >
-                      Load Preseason Games for Week {currentWeek.week_number}
-                    </button>
+  onClick={handleLoadPreseasonGames}
+  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+>
+  Load Preseason Games for Week {currentWeek.week_number}
+</button>
+
+<button
+  onClick={handleTestWeekDetection}
+  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+>
+  Test Week Detection
+</button>
                   </div>
                   <div className="space-y-3 mt-3">
                     <div className="flex items-center gap-3">
