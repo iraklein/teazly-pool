@@ -2,7 +2,8 @@
                   <thead>
                     <tr className="border-b border-gray-200">
                       <th className="text-left py-2 px-3 font-medium text-gray-900 sticky left-0 bg-white">Player</th>
-                      <th className="text-center py-2 px-3 font-medium text-gray-900">Total</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">SB</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900 sticky right-0 bg-white">Total</th> text-gray-900">Total</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W1</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W2</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W3</th>
