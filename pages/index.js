@@ -26,7 +26,63 @@ const TeazlyPool = () => {
     
     return date.toISOString();
   };
+// NFL Calendar Configuration - Step 1: Read-only detection
+const NFL_CALENDAR_2025 = {
+  preseason: {
+    week1: { start: '2025-08-08', end: '2025-08-14' },
+    week2: { start: '2025-08-15', end: '2025-08-21' },
+    week3: { start: '2025-08-22', end: '2025-08-28' }
+  },
+  regular: {
+    week1: { start: '2025-09-04', end: '2025-09-10' },
+    week2: { start: '2025-09-11', end: '2025-09-17' },
+    // ... we can add more weeks later
+  }
+};
 
+// Step 1: Just detect current week (don't change database)
+const getCurrentNFLWeek = () => {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  
+  // Check preseason
+  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.preseason)) {
+    if (today >= dates.start && today <= dates.end) {
+      return {
+        season_type: 'preseason',
+        week_number: parseInt(weekKey.replace('week', '')),
+        week_name: `P${parseInt(weekKey.replace('week', ''))}`,
+        detected: true
+      };
+    }
+  }
+  
+  // Check regular season
+  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.regular)) {
+    if (today >= dates.start && today <= dates.end) {
+      return {
+        season_type: 'regular',
+        week_number: parseInt(weekKey.replace('week', '')),
+        week_name: `W${parseInt(weekKey.replace('week', ''))}`,
+        detected: true
+      };
+    }
+  }
+  
+  // Fallback
+  return {
+    season_type: 'preseason',
+    week_number: 3,
+    week_name: 'P3',
+    detected: false
+  };
+};
+
+// Step 1: Test function - just shows what week it detects
+const handleTestWeekDetection = () => {
+  const detectedWeek = getCurrentNFLWeek();
+  alert(`Detected: ${detectedWeek.week_name} (${detectedWeek.season_type} week ${detectedWeek.week_number})\nAuto-detected: ${detectedWeek.detected}`);
+};
+  
   // Handle URL routing
   useEffect(() => {
     const { view } = router.query;
