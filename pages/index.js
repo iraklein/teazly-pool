@@ -1,3 +1,5 @@
+// Updated pages/index.js - Key changes to use week_number instead of week_id
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
@@ -13,7 +15,6 @@ const TeazlyPool = () => {
 
   // Authentication state
   useEffect(() => {
-    // Check if user is logged in
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
@@ -22,7 +23,6 @@ const TeazlyPool = () => {
 
     checkUser();
 
-    // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setUser(session?.user || null);
@@ -35,7 +35,6 @@ const TeazlyPool = () => {
     };
   }, []);
 
-  // Load data when user is authenticated
   useEffect(() => {
     if (user) {
       loadCurrentWeek();
@@ -53,29 +52,29 @@ const TeazlyPool = () => {
 
     if (week) {
       setCurrentWeek(week);
-      loadGames(week.id);
-      loadUserPicks(week.id);
+      loadGames(week.week_number); // Use week_number instead of week.id
+      loadUserPicks(week.week_number); // Use week_number instead of week.id
     }
   };
 
-  // Load games for current week
-  const loadGames = async (weekId) => {
+  // Load games for current week using week_number
+  const loadGames = async (weekNumber) => {
     const { data: games } = await supabase
       .from('games')
       .select('*')
-      .eq('week_id', weekId)
+      .eq('week_number', weekNumber) // Use week_number instead of week_id
       .order('game_date');
 
     setGames(games || []);
   };
 
-  // Load user's picks for current week
-  const loadUserPicks = async (weekId) => {
+  // Load user's picks for current week using week_number
+  const loadUserPicks = async (weekNumber) => {
     const { data: picks } = await supabase
       .from('picks')
       .select('*')
       .eq('user_id', user.id)
-      .eq('week_id', weekId)
+      .eq('week_number', weekNumber) // Use week_number instead of week_id
       .order('pick_number');
 
     const pickMap = { pick1: '', pick2: '', pick3: '', pick4: '' };
@@ -85,7 +84,6 @@ const TeazlyPool = () => {
     setUserPicks(pickMap);
   };
 
-  // Load standings
   const loadStandings = async () => {
     const { data: users } = await supabase
       .from('users')
@@ -103,7 +101,6 @@ const TeazlyPool = () => {
     });
 
     if (!error && data.user) {
-      // Create user profile
       await supabase.from('users').insert({
         id: data.user.id,
         email,
@@ -123,7 +120,7 @@ const TeazlyPool = () => {
     await supabase.auth.signOut();
   };
 
-  // Pick submission
+  // Pick submission using week_number
   const submitPicks = async () => {
     if (!currentWeek || !user) return;
 
@@ -131,7 +128,7 @@ const TeazlyPool = () => {
       .filter(([_, team]) => team)
       .map(([pickKey, team], index) => ({
         user_id: user.id,
-        week_id: currentWeek.id,
+        week_number: currentWeek.week_number, // Use week_number instead of week_id
         game_id: games.find(g => g.home_team === team || g.away_team === team)?.id,
         picked_team: team,
         pick_number: parseInt(pickKey.replace('pick', '')),
@@ -142,7 +139,7 @@ const TeazlyPool = () => {
       .from('picks')
       .delete()
       .eq('user_id', user.id)
-      .eq('week_id', currentWeek.id);
+      .eq('week_number', currentWeek.week_number); // Use week_number instead of week_id
 
     // Insert new picks
     const { error } = await supabase.from('picks').insert(pickEntries);
@@ -201,7 +198,6 @@ const TeazlyPool = () => {
     }
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -210,7 +206,6 @@ const TeazlyPool = () => {
     );
   }
 
-  // Not authenticated
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -287,10 +282,9 @@ const TeazlyPool = () => {
     );
   }
 
-  // Main application
+  // Main application (rest of the component stays the same - just the data loading changed)
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Header */}
       <header className="bg-white shadow border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
@@ -308,7 +302,6 @@ const TeazlyPool = () => {
         </div>
       </header>
 
-      {/* Navigation */}
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex space-x-8">
@@ -346,7 +339,6 @@ const TeazlyPool = () => {
         </div>
       </nav>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         {currentView === 'dashboard' && (
           <div className="space-y-6">
@@ -422,7 +414,7 @@ const TeazlyPool = () => {
                           {game.status === 'final' ? 'FINAL' : 'Upcoming'}
                         </div>
                         <div className="text-sm font-medium">
-                          Spread: {game.home_team} {game.spread > 0 ? '+' : ''}{game.spread}
+                          Spread: {game.home_team} {game.spread > 0 ? '+' : ''}{game.spread || 'N/A'}
                         </div>
                       </div>
                       
@@ -580,7 +572,7 @@ const TeazlyPool = () => {
                       
                       <div className="mt-3 pt-3 border-t border-gray-100">
                         <div className="text-sm text-gray-600">
-                          Original Spread: {game.home_team} {game.spread > 0 ? '+' : ''}{game.spread}
+                          Original Spread: {game.home_team} {game.spread > 0 ? '+' : ''}{game.spread || 'N/A'}
                         </div>
                       </div>
                     </div>
