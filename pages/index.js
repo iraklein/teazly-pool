@@ -1,4 +1,30 @@
-import React, { useState, useEffect } from 'react';
+<table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 px-3 font-medium text-gray-900 sticky left-0 bg-white">Player</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">Total</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W1</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W2</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W3</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W4</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W5</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W6</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W7</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W8</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W9</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W10</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W11</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W12</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W13</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W14</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W15</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W16</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W17</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W18</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">WC</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">DIV</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">CONF</th>
+                      <th className="text-center py-2 px-3 font-mediumimport React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
 
@@ -575,6 +601,9 @@ const TeazlyPool = () => {
                   <thead>
                     <tr className="border-b border-gray-200">
                       <th className="text-left py-2 px-3 font-medium text-gray-900 sticky left-0 bg-white">Player</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">P1</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">P2</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">P3</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W1</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W2</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W3</th>
@@ -614,8 +643,8 @@ const TeazlyPool = () => {
                             </div>
                           </div>
                         </td>
-                        {/* Week columns - Regular Season (W1-W18) + Playoffs (WC, DIV, CONF, SB) */}
-                        {Array.from({length: 22}, (_, weekIndex) => (
+                        {/* Week columns - Preseason (P1-P3) + Regular Season (W1-W18) + Playoffs (WC, DIV, CONF, SB) */}
+                        {Array.from({length: 25}, (_, weekIndex) => (
                           <td key={weekIndex} className="text-center py-2 px-3 text-sm">
                             {/* This will show win/loss for each week once we have the data */}
                             <span className="text-gray-400">-</span>
