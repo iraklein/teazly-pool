@@ -14,6 +14,149 @@ const TeazlyPool = () => {
   const [userPicks, setUserPicks] = useState({ pick1: '', pick2: '', pick3: '', pick4: '' });
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
 
+  // NFL Calendar Configuration
+const NFL_CALENDAR_2025 = {
+  preseason: {
+    week1: { start: '2025-08-08', end: '2025-08-14' },
+    week2: { start: '2025-08-15', end: '2025-08-21' },
+    week3: { start: '2025-08-22', end: '2025-08-28' }
+  },
+  regular: {
+    week1: { start: '2025-09-04', end: '2025-09-10' },
+    week2: { start: '2025-09-11', end: '2025-09-17' },
+    week3: { start: '2025-09-18', end: '2025-09-24' },
+    week4: { start: '2025-09-25', end: '2025-10-01' },
+    week5: { start: '2025-10-02', end: '2025-10-08' },
+    week6: { start: '2025-10-09', end: '2025-10-15' },
+    week7: { start: '2025-10-16', end: '2025-10-22' },
+    week8: { start: '2025-10-23', end: '2025-10-29' },
+    week9: { start: '2025-10-30', end: '2025-11-05' },
+    week10: { start: '2025-11-06', end: '2025-11-12' },
+    week11: { start: '2025-11-13', end: '2025-11-19' },
+    week12: { start: '2025-11-20', end: '2025-11-26' },
+    week13: { start: '2025-11-27', end: '2025-12-03' },
+    week14: { start: '2025-12-04', end: '2025-12-10' },
+    week15: { start: '2025-12-11', end: '2025-12-17' },
+    week16: { start: '2025-12-18', end: '2025-12-24' },
+    week17: { start: '2025-12-25', end: '2025-12-31' },
+    week18: { start: '2026-01-01', end: '2026-01-07' }
+  },
+  playoffs: {
+    wildcard: { start: '2026-01-08', end: '2026-01-14' },
+    divisional: { start: '2026-01-15', end: '2026-01-21' },
+    conference: { start: '2026-01-22', end: '2026-01-28' },
+    superbowl: { start: '2026-01-29', end: '2026-02-04' }
+  }
+};
+
+// Get current NFL week based on today's date
+const getCurrentNFLWeek = () => {
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  
+  // Check preseason
+  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.preseason)) {
+    if (today >= dates.start && today <= dates.end) {
+      return {
+        season_type: 'preseason',
+        week_number: parseInt(weekKey.replace('week', '')),
+        week_name: `P${parseInt(weekKey.replace('week', ''))}`,
+        start_date: dates.start,
+        end_date: dates.end
+      };
+    }
+  }
+  
+  // Check regular season
+  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.regular)) {
+    if (today >= dates.start && today <= dates.end) {
+      return {
+        season_type: 'regular',
+        week_number: parseInt(weekKey.replace('week', '')),
+        week_name: `W${parseInt(weekKey.replace('week', ''))}`,
+        start_date: dates.start,
+        end_date: dates.end
+      };
+    }
+  }
+  
+  // Check playoffs
+  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.playoffs)) {
+    if (today >= dates.start && today <= dates.end) {
+      return {
+        season_type: 'playoffs',
+        week_number: weekKey === 'wildcard' ? 19 : weekKey === 'divisional' ? 20 : weekKey === 'conference' ? 21 : 22,
+        week_name: weekKey.toUpperCase(),
+        start_date: dates.start,
+        end_date: dates.end
+      };
+    }
+  }
+  
+  // Default fallback (manual override for testing)
+  return {
+    season_type: 'preseason',
+    week_number: 3,
+    week_name: 'P3',
+    start_date: '2025-08-22',
+    end_date: '2025-08-28'
+  };
+};
+
+// Admin function to initialize the current week and load games
+const handleInitializeWeekSystem = async () => {
+  try {
+    console.log('Initializing week system...');
+    
+    // Get current week info
+    const currentWeekInfo = getCurrentNFLWeek();
+    console.log('Current NFL week:', currentWeekInfo);
+    
+    // Mark all weeks as not current
+    await supabase
+      .from('weeks')
+      .update({ is_current: false })
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    
+    // Create or update current week
+    const { data: newWeek, error } = await supabase
+      .from('weeks')
+      .upsert({
+        week_number: currentWeekInfo.week_number,
+        season_type: currentWeekInfo.season_type,
+        week_name: currentWeekInfo.week_name,
+        year: 2025,
+        picks_locked: false,
+        is_current: true,
+        pick_count: 4,
+        tease_points: 14
+      }, {
+        onConflict: 'week_number,season_type',
+        ignoreDuplicates: false
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('Error creating week:', error);
+      alert(`Error creating week: ${error.message}`);
+      return;
+    }
+    
+    // Load games for current week type
+    const gameType = currentWeekInfo.season_type === 'preseason' ? 'preseason' : 'regular';
+    await handleLoadPreseasonGames(); // This will load the games
+    
+    // Reload local data
+    await loadCurrentWeek();
+    
+    alert(`Week system initialized! Current week: ${currentWeekInfo.week_name}`);
+    
+  } catch (error) {
+    console.error('Error initializing week system:', error);
+    alert(`Error initializing week system: ${error.message}`);
+  }
+};
+  
   // Helper function to round game times to normal NFL start times
   const roundToNormalGameTime = (apiTime) => {
     const date = new Date(apiTime);
