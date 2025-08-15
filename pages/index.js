@@ -26,6 +26,7 @@ const TeazlyPool = () => {
     
     return date.toISOString();
   };
+
 // NFL Calendar Configuration - Step 1: Read-only detection
 const NFL_CALENDAR_2025 = {
   preseason: {
@@ -81,6 +82,77 @@ const getCurrentNFLWeek = () => {
 const handleTestWeekDetection = () => {
   const detectedWeek = getCurrentNFLWeek();
   alert(`Detected: ${detectedWeek.week_name} (${detectedWeek.season_type} week ${detectedWeek.week_number})\nAuto-detected: ${detectedWeek.detected}`);
+};
+
+// Step 2: Update database to match detected week
+const handleUpdateCurrentWeek = async () => {
+  try {
+    const detectedWeek = getCurrentNFLWeek();
+    
+    console.log('Updating database to detected week:', detectedWeek);
+    
+    // First, set all weeks to not current
+    await supabase
+      .from('weeks')
+      .update({ is_current: false })
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Update all
+    
+    // Check if a week with this week_number already exists
+    const { data: existingWeek } = await supabase
+      .from('weeks')
+      .select('*')
+      .eq('week_number', detectedWeek.week_number)
+      .single();
+    
+    if (existingWeek) {
+      // Update existing week
+      const { error } = await supabase
+        .from('weeks')
+        .update({ 
+          is_current: true,
+          season_type: detectedWeek.season_type,
+          week_name: detectedWeek.week_name
+        })
+        .eq('id', existingWeek.id);
+      
+      if (error) {
+        console.error('Error updating existing week:', error);
+        alert(`Error updating week: ${error.message}`);
+        return;
+      }
+      
+      alert(`✅ Updated existing week to: ${detectedWeek.week_name}`);
+    } else {
+      // Create new week
+      const { error } = await supabase
+        .from('weeks')
+        .insert({
+          week_number: detectedWeek.week_number,
+          season_type: detectedWeek.season_type,
+          week_name: detectedWeek.week_name,
+          year: 2025,
+          picks_locked: false,
+          is_current: true,
+          pick_count: 4,
+          tease_points: 14
+        });
+      
+      if (error) {
+        console.error('Error creating new week:', error);
+        alert(`Error creating week: ${error.message}`);
+        return;
+      }
+      
+      alert(`✅ Created new week: ${detectedWeek.week_name}`);
+    }
+    
+    // Reload the page data
+    await loadCurrentWeek();
+    
+  } catch (error) {
+    console.error('Error in handleUpdateCurrentWeek:', error);
+    alert(`Error: ${error.message}`);
+  }
 };
   
   // Handle URL routing
@@ -449,14 +521,6 @@ const handleTestWeekDetection = () => {
     }
   };
 
-  // admin function to test week detection
-  <button
-  onClick={handleTestWeekDetection}
-  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
->
-  Test Week Detection
-</button>
-
   // Admin function to clear pick deadline
   const handleClearPickDeadline = async () => {
     if (!currentWeek) return;
@@ -709,18 +773,25 @@ const handleTestWeekDetection = () => {
                       Load Regular Season Games for Week {currentWeek.week_number}
                     </button>
                     <button
-  onClick={handleLoadPreseasonGames}
-  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
->
-  Load Preseason Games for Week {currentWeek.week_number}
-</button>
+                      onClick={handleLoadPreseasonGames}
+                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    >
+                      Load Preseason Games for Week {currentWeek.week_number}
+                    </button>
 
-<button
-  onClick={handleTestWeekDetection}
-  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
->
-  Test Week Detection
-</button>
+                    <button
+                      onClick={handleTestWeekDetection}
+                      className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                    >
+                      Test Week Detection
+                    </button>
+
+                    <button
+                      onClick={handleUpdateCurrentWeek}
+                      className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                    >
+                      Update to Detected Week
+                    </button>
                   </div>
                   <div className="space-y-3 mt-3">
                     <div className="flex items-center gap-3">
