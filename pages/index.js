@@ -126,6 +126,14 @@ const TeazlyPool = () => {
       const gamesData = await response.json();
       console.log(`Fetched ${gameType} games from API:`, gamesData.length);
       
+      // Log the first few raw game times to debug
+      if (gamesData.length > 0) {
+        console.log('Sample raw API times:');
+        gamesData.slice(0, 3).forEach(game => {
+          console.log(`${game.away_team} @ ${game.home_team}: ${game.commence_time}`);
+        });
+      }
+      
       // Transform API data to your database format
       const gamesToInsert = gamesData.map(game => {
         // Find the spread from bookmakers (use first available)
