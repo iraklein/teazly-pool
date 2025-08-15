@@ -751,9 +751,13 @@ const handleInitializeWeekSystem = async () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="font-medium text-blue-800">
-                  Week {currentWeek?.week_number || 'N/A'}
-                </div>
+              <div className="font-medium text-blue-800">
+  {currentWeek?.week_name ? (
+    currentWeek.season_type === 'preseason' ? `Preseason Week ${currentWeek.week_number}` :
+    currentWeek.season_type === 'playoffs' ? currentWeek.week_name :
+    `Week ${currentWeek.week_number}`
+  ) : 'N/A'}
+</div>
                 <p className="text-sm text-blue-600 mt-1">Current Week</p>
               </div>
               
@@ -924,8 +928,13 @@ const handleInitializeWeekSystem = async () => {
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
-                  Week {currentWeek?.week_number || 'N/A'} - 4-Team Teaser (+14 Points)
-                </h2>
+                  <h2 className="text-lg font-semibold">
+  {currentWeek?.week_name ? (
+    currentWeek.season_type === 'preseason' ? `Preseason Week ${currentWeek.week_number}` :
+    currentWeek.season_type === 'playoffs' ? currentWeek.week_name :
+    `Week ${currentWeek.week_number}`
+  ) : 'N/A'} - 4-Team Teaser (+14 Points)
+</h2>
                 <p className="text-sm text-gray-600 mt-1">
                   Pick 4 teams. All must win (with 14-point tease) to win the week.
                 </p>
@@ -1088,7 +1097,13 @@ const handleInitializeWeekSystem = async () => {
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold">Week {currentWeek?.week_number || 'N/A'} - Live Scoring</h2>
+               <h2 className="text-lg font-semibold">
+  {currentWeek?.week_name ? (
+    currentWeek.season_type === 'preseason' ? `Preseason Week ${currentWeek.week_number}` :
+    currentWeek.season_type === 'playoffs' ? currentWeek.week_name :
+    `Week ${currentWeek.week_number}`
+  ) : 'N/A'} - Live Scoring
+</h2>
               </div>
               <div className="p-4">
                 <div className="space-y-4">
