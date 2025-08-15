@@ -1,4 +1,5 @@
 // Updated pages/index.js - Key changes to use week_number instead of week_id
+// test
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
