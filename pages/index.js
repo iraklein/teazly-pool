@@ -1,4 +1,26 @@
-import React, { useState, useEffect } from 'react';
+// Pick submission with deadline check
+  const submitPicks = async () => {
+    if (!currentWeek || !user) return;
+
+    // Check if picks are locked
+    if (currentWeek.picks_locked) {
+      alert('Picks are locked for this week. No changes allowed.');
+      return;
+    }
+
+    // Check deadline
+    if (currentWeek.deadline && new Date() > new Date(currentWeek.deadline)) {
+      alert('Pick deadline has passed. No changes allowed.');
+      return;
+    }
+
+    const pickEntries = Object.entries(userPicks)
+      .filter(([_, team]) => team)
+      .map(([pickKey, team], index) => ({
+        user_id: user.id,
+        week_number: currentWeek.week_number,
+        game_id: games.find(g => g.home_team === team || g.away_team === team)?.id,
+        picked_team: team,import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
 
@@ -298,9 +320,38 @@ const TeazlyPool = () => {
     await supabase.auth.signOut();
   };
 
-  // Pick submission
+  // Check if a specific game is locked (game has started)
+  const isGameLocked = (game) => {
+    return new Date() > new Date(game.game_date);
+  };
+
+  // Check if picks are completely locked for the week
+  const arePicksLocked = () => {
+    return currentWeek?.picks_locked || false;
+  };
+
+  // Pick submission with both lock checks
   const submitPicks = async () => {
     if (!currentWeek || !user) return;
+
+    // Check if picks are locked by deadline
+    if (arePicksLocked()) {
+      alert(`Pick deadline has passed (${new Date(currentWeek.pick_deadline).toLocaleString()}). No changes allowed.`);
+      return;
+    }
+
+    // Check if any selected games have already started
+    const selectedGames = Object.values(userPicks)
+      .filter(Boolean)
+      .map(team => games.find(g => g.home_team === team || g.away_team === team))
+      .filter(Boolean);
+
+    const lockedGames = selectedGames.filter(game => isGameLocked(game));
+    if (lockedGames.length > 0) {
+      const lockedTeams = lockedGames.map(g => `${g.away_team} @ ${g.home_team}`).join(', ');
+      alert(`Cannot submit picks. These games have already started: ${lockedTeams}`);
+      return;
+    }
 
     const pickEntries = Object.entries(userPicks)
       .filter(([_, team]) => team)
@@ -327,6 +378,24 @@ const TeazlyPool = () => {
     } else {
       console.error('Error submitting picks:', error);
       alert('Error submitting picks. Please try again.');
+    }
+  };
+
+  // Admin function to toggle picks lock
+  const handleTogglePicksLock = async () => {
+    if (!currentWeek) return;
+
+    const newLockStatus = !currentWeek.picks_locked;
+    const { error } = await supabase
+      .from('weeks')
+      .update({ picks_locked: newLockStatus })
+      .eq('id', currentWeek.id);
+
+    if (!error) {
+      setCurrentWeek(prev => ({ ...prev, picks_locked: newLockStatus }));
+      alert(`Picks ${newLockStatus ? 'LOCKED' : 'UNLOCKED'} for Week ${currentWeek.week_number}`);
+    } else {
+      alert('Error updating picks lock status');
     }
   };
 
@@ -571,6 +640,32 @@ const TeazlyPool = () => {
                       Load Preseason Games for Week {currentWeek.week_number}
                     </button>
                   </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleSetPickDeadline}
+                        className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                      >
+                        Set Pick Deadline
+                      </button>
+                      {currentWeek.pick_deadline && (
+                        <>
+                          <button
+                            onClick={handleClearPickDeadline}
+                            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                          >
+                            Clear Deadline
+                          </button>
+                          <div className="text-sm">
+                            <span className={`font-medium ${arePicksLocked() ? 'text-red-600' : 'text-green-600'}`}>
+                              Deadline: {new Date(currentWeek.pick_deadline).toLocaleString()}
+                              {arePicksLocked() && ' (LOCKED)'}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <p className="text-sm text-gray-600 mt-2">
                     Choose between regular season or preseason NFL games ({games.length} games currently loaded)
                   </p>
@@ -664,75 +759,89 @@ const TeazlyPool = () => {
               
               <div className="p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {games.map((game) => (
-                    <div key={game.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <div className="text-sm text-gray-600">
-                          {new Date(game.game_date).toLocaleDateString('en-US', { 
-                            weekday: 'short', 
-                            month: 'short', 
-                            day: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            timeZoneName: 'short'
-                          })}
+                  {games.map((game) => {
+                    const gameIsLocked = isGameLocked(game);
+                    const weekIsLocked = arePicksLocked();
+                    
+                    return (
+                      <div key={game.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex justify-between items-center mb-3">
+                          <div className="text-sm text-gray-600">
+                            {new Date(game.game_date).toLocaleDateString('en-US', { 
+                              weekday: 'short', 
+                              month: 'short', 
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              timeZoneName: 'short'
+                            })}
+                            {gameIsLocked && <span className="ml-2 text-red-600 font-bold">LOCKED</span>}
+                          </div>
+                          <div className="text-sm font-medium">
+                            Spread: {game.home_team} {game.spread > 0 ? '+' : ''}{game.spread || 'N/A'}
+                          </div>
                         </div>
-                        <div className="text-sm font-medium">
-                          Spread: {game.home_team} {game.spread > 0 ? '+' : ''}{game.spread || 'N/A'}
+                        
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <button
+                              onClick={() => {
+                                if (gameIsLocked || weekIsLocked) return;
+                                const pickNum = Object.keys(userPicks).find(key => userPicks[key] === '') || 'pick1';
+                                setUserPicks(prev => ({
+                                  ...prev,
+                                  [pickNum]: game.away_team
+                                }));
+                              }}
+                              disabled={gameIsLocked || weekIsLocked}
+                              className={`flex-1 p-2 rounded border text-left mr-2 ${
+                                gameIsLocked || weekIsLocked
+                                  ? 'bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed'
+                                  : Object.values(userPicks).includes(game.away_team) 
+                                    ? 'bg-blue-100 border-blue-500' 
+                                    : 'bg-gray-50 border-gray-300 hover:bg-gray-100'
+                              }`}
+                            >
+                              <div className="font-medium">{game.away_team}</div>
+                              <div className="text-sm text-gray-600">
+                                +{getTeaseSpread(game.away_team, game)} (teased)
+                              </div>
+                              {game.status === 'final' && (
+                                <div className="text-sm font-medium">{game.away_score}</div>
+                              )}
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                if (gameIsLocked || weekIsLocked) return;
+                                const pickNum = Object.keys(userPicks).find(key => userPicks[key] === '') || 'pick1';
+                                setUserPicks(prev => ({
+                                  ...prev,
+                                  [pickNum]: game.home_team
+                                }));
+                              }}
+                              disabled={gameIsLocked || weekIsLocked}
+                              className={`flex-1 p-2 rounded border text-left ${
+                                gameIsLocked || weekIsLocked
+                                  ? 'bg-gray-200 border-gray-300 text-gray-500 cursor-not-allowed'
+                                  : Object.values(userPicks).includes(game.home_team) 
+                                    ? 'bg-blue-100 border-blue-500' 
+                                    : 'bg-gray-50 border-gray-300 hover:bg-gray-100'
+                              }`}
+                            >
+                              <div className="font-medium">{game.home_team}</div>
+                              <div className="text-sm text-gray-600">
+                                {getTeaseSpread(game.home_team, game) > 0 ? '+' : ''}{getTeaseSpread(game.home_team, game)} (teased)
+                              </div>
+                              {game.status === 'final' && (
+                                <div className="text-sm font-medium">{game.home_score}</div>
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <button
-                            onClick={() => {
-                              const pickNum = Object.keys(userPicks).find(key => userPicks[key] === '') || 'pick1';
-                              setUserPicks(prev => ({
-                                ...prev,
-                                [pickNum]: game.away_team
-                              }));
-                            }}
-                            className={`flex-1 p-2 rounded border text-left mr-2 ${
-                              Object.values(userPicks).includes(game.away_team) 
-                                ? 'bg-blue-100 border-blue-500' 
-                                : 'bg-gray-50 border-gray-300 hover:bg-gray-100'
-                            }`}
-                          >
-                            <div className="font-medium">{game.away_team}</div>
-                            <div className="text-sm text-gray-600">
-                              +{getTeaseSpread(game.away_team, game)} (teased)
-                            </div>
-                            {game.status === 'final' && (
-                              <div className="text-sm font-medium">{game.away_score}</div>
-                            )}
-                          </button>
-                          
-                          <button
-                            onClick={() => {
-                              const pickNum = Object.keys(userPicks).find(key => userPicks[key] === '') || 'pick1';
-                              setUserPicks(prev => ({
-                                ...prev,
-                                [pickNum]: game.home_team
-                              }));
-                            }}
-                            className={`flex-1 p-2 rounded border text-left ${
-                              Object.values(userPicks).includes(game.home_team) 
-                                ? 'bg-blue-100 border-blue-500' 
-                                : 'bg-gray-50 border-gray-300 hover:bg-gray-100'
-                            }`}
-                          >
-                            <div className="font-medium">{game.home_team}</div>
-                            <div className="text-sm text-gray-600">
-                              {getTeaseSpread(game.home_team, game) > 0 ? '+' : ''}{getTeaseSpread(game.home_team, game)} (teased)
-                            </div>
-                            {game.status === 'final' && (
-                              <div className="text-sm font-medium">{game.home_score}</div>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -774,17 +883,27 @@ const TeazlyPool = () => {
                 <div className="mt-4 flex gap-2">
                   <button 
                     onClick={() => setUserPicks({ pick1: '', pick2: '', pick3: '', pick4: '' })}
-                    className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                    disabled={arePicksLocked()}
+                    className={`px-4 py-2 border border-gray-300 rounded ${
+                      arePicksLocked() 
+                        ? 'text-gray-400 cursor-not-allowed' 
+                        : 'text-gray-700 hover:bg-gray-50'
+                    }`}
                   >
                     Clear Picks
                   </button>
                   <button 
                     onClick={submitPicks}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                    disabled={Object.values(userPicks).filter(Boolean).length !== 4}
+                    disabled={Object.values(userPicks).filter(Boolean).length !== 4 || arePicksLocked()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Submit Picks
                   </button>
+                  {arePicksLocked() && (
+                    <div className="flex items-center ml-3 text-red-600 font-medium">
+                      🔒 Pick deadline has passed ({new Date(currentWeek.pick_deadline).toLocaleString()})
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
