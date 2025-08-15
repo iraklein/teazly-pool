@@ -13,6 +13,19 @@ const TeazlyPool = () => {
   const [standings, setStandings] = useState([]);
   const [userPicks, setUserPicks] = useState({ pick1: '', pick2: '', pick3: '', pick4: '' });
 
+  // Helper function to round game times to normal NFL start times
+  const roundToNormalGameTime = (apiTime) => {
+    const date = new Date(apiTime);
+    const minutes = date.getMinutes();
+    
+    // Round :01 to :00, keep other common NFL times (:15, :25, :30)
+    if (minutes === 1) {
+      date.setMinutes(0);
+    }
+    
+    return date.toISOString();
+  };
+
   // Handle URL routing
   useEffect(() => {
     const { view } = router.query;
@@ -156,7 +169,7 @@ const TeazlyPool = () => {
           home_team: game.home_team,
           away_team: game.away_team,
           spread: spread,
-          game_date: game.commence_time,
+          game_date: roundToNormalGameTime(game.commence_time),
           status: 'upcoming',
           home_score: null,
           away_score: null
@@ -561,8 +574,7 @@ const TeazlyPool = () => {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200">
-                      <th className="text-left py-2 px-3 font-medium text-gray-900 sticky left-0 bg-white">Total</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-900">Player</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-900 sticky left-0 bg-white">Player</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W1</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W2</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W3</th>
@@ -581,17 +593,17 @@ const TeazlyPool = () => {
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W16</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W17</th>
                       <th className="text-center py-2 px-3 font-medium text-gray-900">W18</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">WC</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">DIV</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">CONF</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">SB</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900 sticky right-0 bg-white">Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {standings.map((player, index) => (
                       <tr key={player.id} className={`border-b border-gray-100 ${player.id === user?.id ? 'bg-blue-50' : ''}`}>
-                        <td className="py-2 px-3 font-bold sticky left-0 bg-white">
-                          <span className={`${player.total_winnings >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            ${player.total_winnings >= 0 ? '+' : ''}{player.total_winnings}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3">
+                        <td className="py-2 px-3 sticky left-0 bg-white">
                           <div className="flex items-center gap-2">
                             <span className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-medium">
                               {index + 1}
@@ -602,13 +614,18 @@ const TeazlyPool = () => {
                             </div>
                           </div>
                         </td>
-                        {/* Week columns - placeholder for now, will need weekly_results data */}
-                        {Array.from({length: 18}, (_, weekIndex) => (
+                        {/* Week columns - Regular Season (W1-W18) + Playoffs (WC, DIV, CONF, SB) */}
+                        {Array.from({length: 22}, (_, weekIndex) => (
                           <td key={weekIndex} className="text-center py-2 px-3 text-sm">
                             {/* This will show win/loss for each week once we have the data */}
                             <span className="text-gray-400">-</span>
                           </td>
                         ))}
+                        <td className="text-center py-2 px-3 font-bold sticky right-0 bg-white">
+                          <span className={`${player.total_winnings >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            ${player.total_winnings >= 0 ? '+' : ''}{player.total_winnings}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
