@@ -14,171 +14,6 @@ const TeazlyPool = () => {
   const [userPicks, setUserPicks] = useState({ pick1: '', pick2: '', pick3: '', pick4: '' });
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
 
-  // NFL Calendar Configuration
-const NFL_CALENDAR_2025 = {
-  preseason: {
-    week1: { start: '2025-08-08', end: '2025-08-14' },
-    week2: { start: '2025-08-15', end: '2025-08-21' },
-    week3: { start: '2025-08-22', end: '2025-08-28' }
-  },
-  regular: {
-    week1: { start: '2025-09-04', end: '2025-09-10' },
-    week2: { start: '2025-09-11', end: '2025-09-17' },
-    week3: { start: '2025-09-18', end: '2025-09-24' },
-    week4: { start: '2025-09-25', end: '2025-10-01' },
-    week5: { start: '2025-10-02', end: '2025-10-08' },
-    week6: { start: '2025-10-09', end: '2025-10-15' },
-    week7: { start: '2025-10-16', end: '2025-10-22' },
-    week8: { start: '2025-10-23', end: '2025-10-29' },
-    week9: { start: '2025-10-30', end: '2025-11-05' },
-    week10: { start: '2025-11-06', end: '2025-11-12' },
-    week11: { start: '2025-11-13', end: '2025-11-19' },
-    week12: { start: '2025-11-20', end: '2025-11-26' },
-    week13: { start: '2025-11-27', end: '2025-12-03' },
-    week14: { start: '2025-12-04', end: '2025-12-10' },
-    week15: { start: '2025-12-11', end: '2025-12-17' },
-    week16: { start: '2025-12-18', end: '2025-12-24' },
-    week17: { start: '2025-12-25', end: '2025-12-31' },
-    week18: { start: '2026-01-01', end: '2026-01-07' }
-  },
-  playoffs: {
-    wildcard: { start: '2026-01-08', end: '2026-01-14' },
-    divisional: { start: '2026-01-15', end: '2026-01-21' },
-    conference: { start: '2026-01-22', end: '2026-01-28' },
-    superbowl: { start: '2026-01-29', end: '2026-02-04' }
-  }
-};
-
-// Get current NFL week based on today's date
-const getCurrentNFLWeek = () => {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-  
-  // Check preseason
-  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.preseason)) {
-    if (today >= dates.start && today <= dates.end) {
-      return {
-        season_type: 'preseason',
-        week_number: parseInt(weekKey.replace('week', '')),
-        week_name: `P${parseInt(weekKey.replace('week', ''))}`,
-        start_date: dates.start,
-        end_date: dates.end
-      };
-    }
-  }
-  
-  // Check regular season
-  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.regular)) {
-    if (today >= dates.start && today <= dates.end) {
-      return {
-        season_type: 'regular',
-        week_number: parseInt(weekKey.replace('week', '')),
-        week_name: `W${parseInt(weekKey.replace('week', ''))}`,
-        start_date: dates.start,
-        end_date: dates.end
-      };
-    }
-  }
-  
-  // Check playoffs
-  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.playoffs)) {
-    if (today >= dates.start && today <= dates.end) {
-      return {
-        season_type: 'playoffs',
-        week_number: weekKey === 'wildcard' ? 19 : weekKey === 'divisional' ? 20 : weekKey === 'conference' ? 21 : 22,
-        week_name: weekKey.toUpperCase(),
-        start_date: dates.start,
-        end_date: dates.end
-      };
-    }
-  }
-  
-  // Default fallback (manual override for testing)
-  return {
-    season_type: 'preseason',
-    week_number: 3,
-    week_name: 'P3',
-    start_date: '2025-08-22',
-    end_date: '2025-08-28'
-  };
-};
-
-// Admin function to initialize the current week and load games
-const handleInitializeWeekSystem = async () => {
-  try {
-    console.log('Initializing week system...');
-    
-    // Get current week info
-    const currentWeekInfo = getCurrentNFLWeek();
-    console.log('Current NFL week:', currentWeekInfo);
-    
-    // First, set all existing weeks to not current
-    await supabase
-      .from('weeks')
-      .update({ is_current: false })
-      .neq('week_number', currentWeekInfo.week_number)
-      .neq('season_type', currentWeekInfo.season_type);
-    
-    // Check if this specific week already exists
-    const { data: existingWeek } = await supabase
-      .from('weeks')
-      .select('*')
-      .eq('week_number', currentWeekInfo.week_number)
-      .eq('season_type', currentWeekInfo.season_type)
-      .single();
-    
-    if (existingWeek) {
-      // Update existing week to be current
-      const { error } = await supabase
-        .from('weeks')
-        .update({ 
-          is_current: true,
-          week_name: currentWeekInfo.week_name
-        })
-        .eq('id', existingWeek.id);
-      
-      if (error) {
-        console.error('Error updating existing week:', error);
-        alert(`Error updating week: ${error.message}`);
-        return;
-      }
-      
-      console.log('Updated existing week to current');
-    } else {
-      // Create new week
-      const { error } = await supabase
-        .from('weeks')
-        .insert({
-          week_number: currentWeekInfo.week_number,
-          season_type: currentWeekInfo.season_type,
-          week_name: currentWeekInfo.week_name,
-          year: 2025,
-          picks_locked: false,
-          is_current: true,
-          pick_count: 4,
-          tease_points: 14
-          // Don't include pick_deadline - let it be null
-        });
-      
-      if (error) {
-        console.error('Error creating new week:', error);
-        alert(`Error creating week: ${error.message}`);
-        return;
-      }
-      
-      console.log('Created new current week');
-    }
-    
-    // Reload local data
-    await loadCurrentWeek();
-    
-    alert(`Week system initialized! Current week: ${currentWeekInfo.week_name}`);
-    
-  } catch (error) {
-    console.error('Error initializing week system:', error);
-    alert(`Error initializing week system: ${error.message}`);
-  }
-};
-  
   // Helper function to round game times to normal NFL start times
   const roundToNormalGameTime = (apiTime) => {
     const date = new Date(apiTime);
@@ -773,13 +608,9 @@ const handleInitializeWeekSystem = async () => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <div className="font-medium text-blue-800">
-  {currentWeek?.week_name ? (
-    currentWeek.season_type === 'preseason' ? `Preseason Week ${currentWeek.week_number}` :
-    currentWeek.season_type === 'playoffs' ? currentWeek.week_name :
-    `Week ${currentWeek.week_number}`
-  ) : 'N/A'}
-</div>
+                <div className="font-medium text-blue-800">
+                  Week {currentWeek?.week_number || 'N/A'}
+                </div>
                 <p className="text-sm text-blue-600 mt-1">Current Week</p>
               </div>
               
@@ -799,79 +630,59 @@ const handleInitializeWeekSystem = async () => {
               </div>
             </div>
 
-{/* Admin Actions Section - Only for Admins */}
-{currentWeek && currentUserProfile?.is_admin && (
-  <div className="bg-white rounded-lg shadow border">
-    <div className="p-4 border-b border-gray-200">
-      <h3 className="text-lg font-semibold">Admin Actions</h3>
-    </div>
-    <div className="p-4 space-y-4">
-      
-      {/* Weekly Management */}
-      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-        <h4 className="font-semibold text-blue-800 mb-3">Weekly Management</h4>
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleInitializeWeekSystem}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              Initialize Week System
-            </button>
-          </div>
-          <div className="text-sm text-blue-700">
-            <div><strong>Current Week:</strong> {currentWeek.week_name || `Week ${currentWeek.week_number}`} ({currentWeek.season_type || 'regular'})</div>
-            <div><strong>Games Loaded:</strong> {games.length}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Game Loading */}
-      <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-        <h4 className="font-semibold text-green-800 mb-3">Manual Game Loading</h4>
-        <div className="space-y-3">
-          <div className="flex gap-3">
-            <button
-              onClick={handleLoadRegularSeasonGames}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-            >
-              Load Regular Season Games
-            </button>
-            <button
-              onClick={handleLoadPreseasonGames}
-              className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700"
-            >
-              Load Preseason Games
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Pick Deadline Management */}
-      <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-        <h4 className="font-semibold text-orange-800 mb-3">Pick Deadline Management</h4>
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSetPickDeadline}
-              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-            >
-              Set Pick Deadline
-            </button>
-            {currentWeek.pick_deadline && (
-              <button
-                onClick={handleClearPickDeadline}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-              >
-                Clear Deadline
-              </button>
+            {/* Admin Actions Section - Only for Admins */}
+            {currentWeek && currentUserProfile?.is_admin && (
+              <div className="bg-white rounded-lg shadow border">
+                <div className="p-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold">Admin Actions</h3>
+                </div>
+                <div className="p-4">
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleLoadRegularSeasonGames}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mr-3"
+                    >
+                      Load Regular Season Games for Week {currentWeek.week_number}
+                    </button>
+                    <button
+                      onClick={handleLoadPreseasonGames}
+                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    >
+                      Load Preseason Games for Week {currentWeek.week_number}
+                    </button>
+                  </div>
+                  <div className="space-y-3 mt-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={handleSetPickDeadline}
+                        className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                      >
+                        Set Pick Deadline
+                      </button>
+                      {currentWeek.pick_deadline && (
+                        <>
+                          <button
+                            onClick={handleClearPickDeadline}
+                            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                          >
+                            Clear Deadline
+                          </button>
+                          <div className="text-sm">
+                            <span className={`font-medium ${arePicksLocked() ? 'text-red-600' : 'text-green-600'}`}>
+                              Deadline: {new Date(currentWeek.pick_deadline).toLocaleString()}
+                              {arePicksLocked() && ' (LOCKED)'}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Choose between regular season or preseason NFL games ({games.length} games currently loaded)
+                  </p>
+                </div>
+              </div>
             )}
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
 
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
@@ -948,18 +759,14 @@ const handleInitializeWeekSystem = async () => {
         {currentView === 'picks' && (
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow border">
-<div className="p-4 border-b border-gray-200">
-  <h2 className="text-lg font-semibold">
-    {currentWeek?.week_name ? (
-      currentWeek.season_type === 'preseason' ? `Preseason Week ${currentWeek.week_number}` :
-      currentWeek.season_type === 'playoffs' ? currentWeek.week_name :
-      `Week ${currentWeek.week_number}`
-    ) : 'N/A'} - 4-Team Teaser (+14 Points)
-  </h2>
-  <p className="text-sm text-gray-600 mt-1">
-    Pick 4 teams. All must win (with 14-point tease) to win the week.
-  </p>
-</div>
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold">
+                  Week {currentWeek?.week_number || 'N/A'} - 4-Team Teaser (+14 Points)
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Pick 4 teams. All must win (with 14-point tease) to win the week.
+                </p>
+              </div>
               
               <div className="p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1118,13 +925,7 @@ const handleInitializeWeekSystem = async () => {
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
-               <h2 className="text-lg font-semibold">
-  {currentWeek?.week_name ? (
-    currentWeek.season_type === 'preseason' ? `Preseason Week ${currentWeek.week_number}` :
-    currentWeek.season_type === 'playoffs' ? currentWeek.week_name :
-    `Week ${currentWeek.week_number}`
-  ) : 'N/A'} - Live Scoring
-</h2>
+                <h2 className="text-lg font-semibold">Week {currentWeek?.week_number || 'N/A'} - Live Scoring</h2>
               </div>
               <div className="p-4">
                 <div className="space-y-4">
