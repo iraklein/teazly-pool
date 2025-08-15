@@ -118,10 +118,15 @@ const TeazlyPool = () => {
 
         if (profileError) {
           console.error('Profile creation failed:', profileError);
-          return { 
-            data: null, 
-            error: { message: `Profile creation failed: ${profileError.message}` } 
-          };
+          // Don't return error if it's just a duplicate key error (user already exists)
+          if (profileError.code === '23505') {
+            console.log('User profile already exists, continuing...');
+          } else {
+            return { 
+              data: null, 
+              error: { message: `Profile creation failed: ${profileError.message}` } 
+            };
+          }
         }
         
         console.log('Profile created successfully with ID:', data.user.id);
