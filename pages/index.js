@@ -1,26 +1,4 @@
-// Pick submission with deadline checkz
-  const submitPicks = async () => {
-    if (!currentWeek || !user) return;
-
-    // Check if picks are locked
-    if (currentWeek.picks_locked) {
-      alert('Picks are locked for this week. No changes allowed.');
-      return;
-    }
-
-    // Check deadline
-    if (currentWeek.deadline && new Date() > new Date(currentWeek.deadline)) {
-      alert('Pick deadline has passed. No changes allowed.');
-      return;
-    }
-
-    const pickEntries = Object.entries(userPicks)
-      .filter(([_, team]) => team)
-      .map(([pickKey, team], index) => ({
-        user_id: user.id,
-        week_number: currentWeek.week_number,
-        game_id: games.find(g => g.home_team === team || g.away_team === team)?.id,
-        picked_team: team,import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
 
@@ -327,16 +305,25 @@ const TeazlyPool = () => {
 
   // Check if picks are completely locked for the week
   const arePicksLocked = () => {
-    return currentWeek?.picks_locked || false;
+    if (!currentWeek) return false;
+    if (currentWeek.picks_locked) return true;
+    if (currentWeek.pick_deadline && new Date() > new Date(currentWeek.pick_deadline)) return true;
+    return false;
   };
 
-  // Pick submission with both lock checks
+  // Pick submission with deadline check
   const submitPicks = async () => {
     if (!currentWeek || !user) return;
 
-    // Check if picks are locked by deadline
-    if (arePicksLocked()) {
-      alert(`Pick deadline has passed (${new Date(currentWeek.pick_deadline).toLocaleString()}). No changes allowed.`);
+    // Check if picks are locked
+    if (currentWeek.picks_locked) {
+      alert('Picks are locked for this week. No changes allowed.');
+      return;
+    }
+
+    // Check deadline
+    if (currentWeek.pick_deadline && new Date() > new Date(currentWeek.pick_deadline)) {
+      alert('Pick deadline has passed. No changes allowed.');
       return;
     }
 
@@ -381,21 +368,45 @@ const TeazlyPool = () => {
     }
   };
 
-  // Admin function to toggle picks lock
-  const handleTogglePicksLock = async () => {
+  // Admin function to set pick deadline
+  const handleSetPickDeadline = async () => {
     if (!currentWeek) return;
 
-    const newLockStatus = !currentWeek.picks_locked;
+    const deadlineStr = prompt('Enter pick deadline (YYYY-MM-DD HH:MM format, e.g., 2025-08-18 17:00):');
+    if (!deadlineStr) return;
+
+    try {
+      const deadline = new Date(deadlineStr).toISOString();
+      const { error } = await supabase
+        .from('weeks')
+        .update({ pick_deadline: deadline })
+        .eq('id', currentWeek.id);
+
+      if (!error) {
+        setCurrentWeek(prev => ({ ...prev, pick_deadline: deadline }));
+        alert(`Pick deadline set to: ${new Date(deadline).toLocaleString()}`);
+      } else {
+        alert('Error setting deadline');
+      }
+    } catch (error) {
+      alert('Invalid date format. Use YYYY-MM-DD HH:MM');
+    }
+  };
+
+  // Admin function to clear pick deadline
+  const handleClearPickDeadline = async () => {
+    if (!currentWeek) return;
+
     const { error } = await supabase
       .from('weeks')
-      .update({ picks_locked: newLockStatus })
+      .update({ pick_deadline: null })
       .eq('id', currentWeek.id);
 
     if (!error) {
-      setCurrentWeek(prev => ({ ...prev, picks_locked: newLockStatus }));
-      alert(`Picks ${newLockStatus ? 'LOCKED' : 'UNLOCKED'} for Week ${currentWeek.week_number}`);
+      setCurrentWeek(prev => ({ ...prev, pick_deadline: null }));
+      alert('Pick deadline cleared');
     } else {
-      alert('Error updating picks lock status');
+      alert('Error clearing deadline');
     }
   };
 
@@ -640,7 +651,7 @@ const TeazlyPool = () => {
                       Load Preseason Games for Week {currentWeek.week_number}
                     </button>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-3 mt-3">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={handleSetPickDeadline}
@@ -899,7 +910,7 @@ const TeazlyPool = () => {
                   >
                     Submit Picks
                   </button>
-                  {arePicksLocked() && (
+                  {arePicksLocked() && currentWeek.pick_deadline && (
                     <div className="flex items-center ml-3 text-red-600 font-medium">
                       🔒 Pick deadline has passed ({new Date(currentWeek.pick_deadline).toLocaleString()})
                     </div>
