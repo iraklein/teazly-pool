@@ -464,7 +464,7 @@ const TeazlyPool = () => {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Dashboard
+              Standings
             </button>
             <button
               onClick={() => navigateTo('picks')}
@@ -510,9 +510,10 @@ const TeazlyPool = () => {
               
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                 <div className="font-medium text-purple-800">
-                  ${standings[0]?.total_winnings || 0}
+                  ${user && standings.find(s => s.id === user.id)?.total_winnings >= 0 ? '+' : ''}
+                  {user && standings.find(s => s.id === user.id)?.total_winnings || 0}
                 </div>
-                <p className="text-sm text-purple-600 mt-1">Leader Total</p>
+                <p className="text-sm text-purple-600 mt-1">Your Net Win/Loss</p>
               </div>
             </div>
 
@@ -546,27 +547,64 @@ const TeazlyPool = () => {
 
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold">Current Standings</h2>
+                <h2 className="text-lg font-semibold">Season Standings</h2>
               </div>
-              <div className="p-4">
-                <div className="space-y-2">
-                  {standings.map((player, index) => (
-                    <div key={player.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-medium">
-                          {index + 1}
-                        </span>
-                        <div>
-                          <div className="font-medium">{player.full_name}</div>
-                          <div className="text-sm text-gray-600">@{player.username}</div>
-                        </div>
-                      </div>
-                      <div className={`font-bold text-lg ${player.total_winnings >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        ${player.total_winnings >= 0 ? '+' : ''}{player.total_winnings}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="p-4 overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 px-3 font-medium text-gray-900 sticky left-0 bg-white">Total</th>
+                      <th className="text-left py-2 px-3 font-medium text-gray-900">Player</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W1</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W2</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W3</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W4</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W5</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W6</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W7</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W8</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W9</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W10</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W11</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W12</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W13</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W14</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W15</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W16</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W17</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-900">W18</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standings.map((player, index) => (
+                      <tr key={player.id} className={`border-b border-gray-100 ${player.id === user?.id ? 'bg-blue-50' : ''}`}>
+                        <td className="py-2 px-3 font-bold sticky left-0 bg-white">
+                          <span className={`${player.total_winnings >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            ${player.total_winnings >= 0 ? '+' : ''}{player.total_winnings}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-medium">
+                              {index + 1}
+                            </span>
+                            <div>
+                              <div className="font-medium">{player.full_name}</div>
+                              <div className="text-xs text-gray-600">@{player.username}</div>
+                            </div>
+                          </div>
+                        </td>
+                        {/* Week columns - placeholder for now, will need weekly_results data */}
+                        {Array.from({length: 18}, (_, weekIndex) => (
+                          <td key={weekIndex} className="text-center py-2 px-3 text-sm">
+                            {/* This will show win/loss for each week once we have the data */}
+                            <span className="text-gray-400">-</span>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -590,7 +628,14 @@ const TeazlyPool = () => {
                     <div key={game.id} className="border border-gray-200 rounded-lg p-4">
                       <div className="flex justify-between items-center mb-3">
                         <div className="text-sm text-gray-600">
-                          {game.status === 'final' ? 'FINAL' : 'Upcoming'}
+                          {new Date(game.game_date).toLocaleDateString('en-US', { 
+                            weekday: 'short', 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            timeZoneName: 'short'
+                          })}
                         </div>
                         <div className="text-sm font-medium">
                           Spread: {game.home_team} {game.spread > 0 ? '+' : ''}{game.spread || 'N/A'}
