@@ -330,17 +330,20 @@ useEffect(() => {
 
   // Load current week data
   const loadCurrentWeek = async () => {
-    const { data: week } = await supabase
-      .from('weeks')
-      .select('*')
-      .eq('is_current', true)
-      .single();
-
-    if (week) {
-      setCurrentWeek(week);
-      loadGames(week.week_number);
-      loadUserPicks(week.week_number);
-    }
+    // TEMPORARY FIX: Hardcode current week due to weeks table 406 error
+    const hardcodedWeek = {
+      week_number: 2,
+      season_type: 1,
+      year: 2025,
+      is_current: true,
+      pick_count: 4,
+      tease_points: 14
+    };
+    
+    console.log('🔧 Using hardcoded week (weeks table has 406 error):', hardcodedWeek);
+    setCurrentWeek(hardcodedWeek);
+    loadGames(hardcodedWeek.week_number);
+    loadUserPicks(hardcodedWeek.week_number);
   };
 
   // Load games for current week
