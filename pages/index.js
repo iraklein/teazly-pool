@@ -314,12 +314,13 @@ useEffect(() => {
 
   // Load games for current week
   const loadGames = async (weekNumber) => {
-    console.log(`🔍 Loading games for week ${weekNumber}...`);
+    console.log(`🔍 Loading games for week ${weekNumber}, season_type ${currentWeek?.season_type}...`);
     
     const { data: games, error } = await supabase
       .from('games')
       .select('*')
       .eq('week_number', weekNumber)
+      .eq('season_type', currentWeek?.season_type || 1)
       .order('game_date');
 
     if (error) {
@@ -327,15 +328,7 @@ useEffect(() => {
       return;
     }
 
-    console.log(`📋 Found ${games?.length || 0} games for week ${weekNumber}:`, games);
-    
-    // Also check what games exist in total
-    const { data: allGames } = await supabase
-      .from('games')
-      .select('week_number, season_type, home_team, away_team')
-      .order('week_number');
-    
-    console.log('📊 All games in database:', allGames);
+    console.log(`📋 Found ${games?.length || 0} games for week ${weekNumber}, season_type ${currentWeek?.season_type}:`, games);
     
     setGames(games || []);
   };
