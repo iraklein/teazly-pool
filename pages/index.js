@@ -74,10 +74,10 @@ const getCurrentNFLWeek = () => {
   // Determine what NFL week this maps to based on preseason schedule
   // Preseason 2025: 
   // P1: Tuesday Aug 6 - Monday Aug 12  
-  // P2: Tuesday Aug 13 - Monday Aug 19
+  // P2: Tuesday Aug 13 - Monday Aug 19  (THIS WEEK - where we are now)
   // P3: Tuesday Aug 20 - Monday Aug 26
   
-  if (weekStart >= '2025-08-06' && weekStart <= '2025-08-12') {
+  if (weekStart >= '2025-08-06' && weekStart < '2025-08-13') {
     return {
       season_type: 1,
       week_number: 1,
@@ -85,7 +85,7 @@ const getCurrentNFLWeek = () => {
       week_start: weekStart,
       detected: true
     };
-  } else if (weekStart >= '2025-08-13' && weekStart <= '2025-08-19') {
+  } else if (weekStart >= '2025-08-13' && weekStart < '2025-08-20') {
     return {
       season_type: 1,
       week_number: 2,
@@ -93,7 +93,7 @@ const getCurrentNFLWeek = () => {
       week_start: weekStart,
       detected: true
     };
-  } else if (weekStart >= '2025-08-20' && weekStart <= '2025-08-26') {
+  } else if (weekStart >= '2025-08-20' && weekStart < '2025-08-27') {
     return {
       season_type: 1,
       week_number: 3, 
