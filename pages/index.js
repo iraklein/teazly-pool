@@ -167,9 +167,54 @@ useEffect(() => {
     // Run initial sync
     await autoSyncNFLSchedule();
     
-    // 1. Schedule/Odds sync every 5 minutes
+    // 1. Schedule/Odds sync every 5 minutes + auto week detection
     scheduleInterval = setInterval(async () => {
       try {
+        // Auto-detect and update current week if needed
+        const detectedWeek = getCurrentNFLWeek();
+        if (currentWeek && (detectedWeek.week_number !== currentWeek.week_number || detectedWeek.season_type !== currentWeek.season_type)) {
+          console.log(`📅 Week change detected: ${currentWeek.week_number} → ${detectedWeek.week_number}, updating database`);
+          
+          // Set all weeks to not current
+          await supabase
+            .from('weeks')
+            .update({ is_current: false })
+            .neq('id', '00000000-0000-0000-0000-000000000000');
+          
+          // Set the detected week to current (create if doesn't exist)
+          const { data: existingWeek } = await supabase
+            .from('weeks')
+            .select('*')
+            .eq('week_number', detectedWeek.week_number)
+            .eq('season_type', detectedWeek.season_type)
+            .single();
+            
+          if (existingWeek) {
+            await supabase
+              .from('weeks')
+              .update({ is_current: true })
+              .eq('id', existingWeek.id);
+          } else {
+            // Create new week
+            await supabase
+              .from('weeks')
+              .insert({
+                week_number: detectedWeek.week_number,
+                season_type: detectedWeek.season_type,
+                year: 2025,
+                deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                picks_locked: false,
+                is_current: true,
+                pick_count: 4,
+                tease_points: 14
+              });
+          }
+          
+          // Reload current week data
+          await loadCurrentWeek();
+          console.log(`✅ Auto-updated to ${detectedWeek.week_name}`);
+        }
+        
         const result = await autoSyncNFLSchedule();
         
         // If games were updated and we're viewing current week, refresh the display
@@ -300,9 +345,11 @@ useEffect(() => {
       .from('games')
       .select('*')
       .eq('week_number', weekNumber)
+      .eq('season_type', currentWeek?.season_type || 1) // Filter by season type too
       .order('game_date');
 
     setGames(games || []);
+    console.log(`📋 Loaded ${games?.length || 0} games for week ${weekNumber}, season_type ${currentWeek?.season_type || 1}`);
   };
 
   // Load user's picks for current week
@@ -1479,16 +1526,10 @@ useEffect(() => {
                     Test Week Detection
                   </button>
                 </div>
-                <button
-                  onClick={handleUpdateCurrentWeek}
-                  className="px-4 py-3 bg-orange-600 text-white rounded hover:bg-orange-700 w-full mb-4"
-                >
-                  Update to Detected Week
-                </button>
                 <p className="text-sm text-gray-600">
                   Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
                   <br />
-                  NFL schedule auto-syncs every 5 minutes to stay current with real schedule changes
+                  NFL schedule auto-syncs every 5 minutes. Current week auto-updates every Tuesday.
                 </p>
               </div>
             </div>
