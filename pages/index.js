@@ -171,50 +171,13 @@ useEffect(() => {
     // Run initial sync
     await autoSyncNFLSchedule();
     
-    // 1. Schedule/Odds sync every 5 minutes + auto week detection
+    // 1. Schedule/Odds sync every 5 minutes
     scheduleInterval = setInterval(async () => {
       try {
-        // Auto-detect and update current week if needed
+        // Check if week has changed and reload if needed
         const detectedWeek = getCurrentNFLWeek();
         if (currentWeek && (detectedWeek.week_number !== currentWeek.week_number || detectedWeek.season_type !== currentWeek.season_type)) {
-          console.log(`📅 Week change detected: ${currentWeek.week_number} → ${detectedWeek.week_number}, updating database`);
-          
-          // Set all weeks to not current
-          await supabase
-            .from('weeks')
-            .update({ is_current: false })
-            .neq('id', '00000000-0000-0000-0000-000000000000');
-          
-          // Set the detected week to current (create if doesn't exist)
-          const { data: existingWeek } = await supabase
-            .from('weeks')
-            .select('*')
-            .eq('week_number', detectedWeek.week_number)
-            .eq('season_type', detectedWeek.season_type)
-            .single();
-            
-          if (existingWeek) {
-            await supabase
-              .from('weeks')
-              .update({ is_current: true })
-              .eq('id', existingWeek.id);
-          } else {
-            // Create new week
-            await supabase
-              .from('weeks')
-              .insert({
-                week_number: detectedWeek.week_number,
-                season_type: detectedWeek.season_type,
-                year: 2025,
-                deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                picks_locked: false,
-                is_current: true,
-                pick_count: 4,
-                tease_points: 14
-              });
-          }
-          
-          // Reload current week data
+          console.log(`📅 Week change detected: ${currentWeek.week_number} → ${detectedWeek.week_number}, reloading`);
           await loadCurrentWeek();
           console.log(`✅ Auto-updated to ${detectedWeek.week_name}`);
         }
@@ -330,20 +293,23 @@ useEffect(() => {
 
   // Load current week data
   const loadCurrentWeek = async () => {
-    // TEMPORARY FIX: Hardcode current week due to weeks table 406 error
-    const hardcodedWeek = {
-      week_number: 2,
-      season_type: 1,
+    // Auto-detect current week instead of using weeks table
+    const detectedWeek = getCurrentNFLWeek();
+    
+    const currentWeekData = {
+      week_number: detectedWeek.week_number,
+      season_type: detectedWeek.season_type,
       year: 2025,
       is_current: true,
       pick_count: 4,
-      tease_points: 14
+      tease_points: 14,
+      week_name: detectedWeek.week_name
     };
     
-    console.log('🔧 Using hardcoded week (weeks table has 406 error):', hardcodedWeek);
-    setCurrentWeek(hardcodedWeek);
-    loadGames(hardcodedWeek.week_number);
-    loadUserPicks(hardcodedWeek.week_number);
+    console.log('📅 Auto-detected current week:', currentWeekData);
+    setCurrentWeek(currentWeekData);
+    loadGames(currentWeekData.week_number);
+    loadUserPicks(currentWeekData.week_number);
   };
 
   // Load games for current week
