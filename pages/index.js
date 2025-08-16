@@ -64,9 +64,17 @@ const getCurrentNFLWeek = () => {
   } else if (dayOfWeek === 1) {
     // Monday - go back 6 days to get Tuesday  
     weekStartTuesday.setDate(now.getDate() - 6);
+  } else if (dayOfWeek === 2) {
+    // Tuesday - use today
+    // weekStartTuesday is already set to today
   } else {
-    // Tuesday (2) through Saturday (6) - go back to most recent Tuesday
+    // Wednesday (3) through Saturday (6) - go back to most recent Tuesday
     weekStartTuesday.setDate(now.getDate() - (dayOfWeek - 2));
+  }
+  
+  // TEMPORARY FIX: For this week, force it to Aug 13
+  if (now >= new Date('2025-08-13') && now < new Date('2025-08-20')) {
+    weekStartTuesday = new Date('2025-08-13');
   }
   
   const weekStart = weekStartTuesday.toISOString().split('T')[0];
