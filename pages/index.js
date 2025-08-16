@@ -56,7 +56,17 @@ const TeazlyPool = () => {
       case 'status_in_progress':
         // For live games, show quarter and time if available
         if (game.quarter && game.clock) {
-          return `Q${game.quarter} - ${game.clock}`;
+          // Convert elapsed seconds to time remaining
+          const elapsedSeconds = parseInt(game.clock);
+          const remainingSeconds = (15 * 60) - elapsedSeconds; // 15 minutes per quarter
+          
+          if (remainingSeconds > 0) {
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            return `Q${game.quarter} - ${minutes}:${seconds.toString().padStart(2, '0')}`;
+          } else {
+            return `Q${game.quarter} - 0:00`;
+          }
         } else if (game.quarter) {
           return `Q${game.quarter}`;
         }
@@ -1259,7 +1269,7 @@ useEffect(() => {
                               <div className="text-sm text-gray-600">
                                 +{getTeaseSpread(game.away_team, game)} (teased)
                               </div>
-                              {game.status === 'final' && (
+                              {(game.status === 'final' || game.status === 'status_final' || game.status === 'status_in_progress') && game.away_score !== null && (
                                 <div className="text-sm font-medium">{game.away_score}</div>
                               )}
                             </button>
@@ -1286,7 +1296,7 @@ useEffect(() => {
                               <div className="text-sm text-gray-600">
                                 {getTeaseSpread(game.home_team, game) > 0 ? '+' : ''}{getTeaseSpread(game.home_team, game)} (teased)
                               </div>
-                              {game.status === 'final' && (
+                              {(game.status === 'final' || game.status === 'status_final' || game.status === 'status_in_progress') && game.home_score !== null && (
                                 <div className="text-sm font-medium">{game.home_score}</div>
                               )}
                             </button>
