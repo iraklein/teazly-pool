@@ -298,7 +298,8 @@ const handleUpdateLiveScores = async () => {
           game_date: roundToNormalGameTime(game.commence_time),
           status: 'upcoming',
           home_score: null,
-          away_score: null
+          away_score: null,
+          season_type: gameType === 'preseason' ? 1 : 2 // Set correct season type
         };
       });
       
