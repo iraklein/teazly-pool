@@ -1185,7 +1185,7 @@ useEffect(() => {
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
-                  Preseason Week {currentWeek?.week_number || 'N/A'}
+                  {currentWeek?.week_name || `Week ${currentWeek?.week_number || 'N/A'}`}
                 </h2>
               </div>
               
@@ -1393,9 +1393,7 @@ useEffect(() => {
 
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold">
-                  Preseason Week {currentWeek?.week_number || 'N/A'} - Live Scoring
-                </h2>
+                <h2 className="text-lg font-semibold">Week {currentWeek?.week_number || 'N/A'} - Live Scoring</h2>
               </div>
               <div className="p-4">
                 <div className="space-y-4">
