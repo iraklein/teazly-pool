@@ -45,39 +45,70 @@ const NFL_CALENDAR_2025 = {
   }
 };
 
-// Step 1: Just detect current week (don't change database)
+// Step 1: Detect current week using Tuesday-Monday periods
 const getCurrentNFLWeek = () => {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  const now = new Date();
   
-  // Check preseason
-  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.preseason)) {
-    if (today >= dates.start && today <= dates.end) {
-      return {
-        season_type: 'preseason',
-        week_number: parseInt(weekKey.replace('week', '')),
-        week_name: `P${parseInt(weekKey.replace('week', ''))}`,
-        detected: true
-      };
-    }
+  // Get the current Tuesday-Monday week period
+  // If today is Monday, we're still in the same week
+  // If today is Tuesday or later, we might be in a new week
+  
+  const dayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, etc.
+  
+  // Calculate the Tuesday that starts the current week
+  let weekStartTuesday = new Date(now);
+  
+  if (dayOfWeek === 0) {
+    // Sunday - go back 5 days to get Tuesday
+    weekStartTuesday.setDate(now.getDate() - 5);
+  } else if (dayOfWeek === 1) {
+    // Monday - go back 6 days to get Tuesday  
+    weekStartTuesday.setDate(now.getDate() - 6);
+  } else {
+    // Tuesday (2) through Saturday (6) - go back to most recent Tuesday
+    weekStartTuesday.setDate(now.getDate() - (dayOfWeek - 2));
   }
   
-  // Check regular season
-  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.regular)) {
-    if (today >= dates.start && today <= dates.end) {
-      return {
-        season_type: 'regular',
-        week_number: parseInt(weekKey.replace('week', '')),
-        week_name: `W${parseInt(weekKey.replace('week', ''))}`,
-        detected: true
-      };
-    }
+  const weekStart = weekStartTuesday.toISOString().split('T')[0];
+  
+  // Determine what NFL week this maps to based on preseason schedule
+  // Preseason 2025: 
+  // P1: Tuesday Aug 6 - Monday Aug 12  
+  // P2: Tuesday Aug 13 - Monday Aug 19
+  // P3: Tuesday Aug 20 - Monday Aug 26
+  
+  if (weekStart >= '2025-08-06' && weekStart <= '2025-08-12') {
+    return {
+      season_type: 1,
+      week_number: 1,
+      week_name: 'Preseason Week 1',
+      week_start: weekStart,
+      detected: true
+    };
+  } else if (weekStart >= '2025-08-13' && weekStart <= '2025-08-19') {
+    return {
+      season_type: 1,
+      week_number: 2,
+      week_name: 'Preseason Week 2',
+      week_start: weekStart,
+      detected: true
+    };
+  } else if (weekStart >= '2025-08-20' && weekStart <= '2025-08-26') {
+    return {
+      season_type: 1,
+      week_number: 3, 
+      week_name: 'Preseason Week 3',
+      week_start: weekStart,
+      detected: true
+    };
   }
   
-  // Fallback
+  // For now, default to P2 since we're in preseason
   return {
-    season_type: 'preseason',
-    week_number: 3,
-    week_name: 'P3',
+    season_type: 1,
+    week_number: 2,
+    week_name: 'Preseason Week 2', 
+    week_start: weekStart,
     detected: false
   };
 };
@@ -1088,11 +1119,8 @@ useEffect(() => {
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
-                  Week {currentWeek?.week_number || 'N/A'} - 4-Team Teaser (+14 Points)
+                  {currentWeek?.week_name || `Week ${currentWeek?.week_number || 'N/A'}`}
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Pick 4 teams. All must win (with 14-point tease) to win the week.
-                </p>
               </div>
               
               <div className="p-4">
