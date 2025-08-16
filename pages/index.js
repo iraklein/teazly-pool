@@ -53,6 +53,7 @@ const TeazlyPool = () => {
         return 'FINAL';
       case 'in_progress':
       case 'live':
+      case 'status_in_progress':
         // For live games, show quarter and time if available
         if (game.quarter && game.clock) {
           return `Q${game.quarter} - ${game.clock}`;
