@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
-import { updateLiveScores, autoSyncNFLSchedule, standardizeExistingTeamNames } from '../lib/loadGames';
+import { autoSyncNFLSchedule, clearAllGames } from '../lib/loadGames';
 
 const TeazlyPool = () => {
   const router = useRouter();
@@ -124,22 +124,6 @@ const handleUpdateCurrentWeek = async () => {
   }
 };
 
-// Manual live score update handler for admins
-const handleUpdateLiveScores = async () => {
-  try {
-    const result = await updateLiveScores();
-    
-    // Reload games to reflect the updates
-    if (currentWeek) {
-      await loadGames(currentWeek.week_number);
-    }
-    
-    alert(`Live scores updated! ${result.updated} games updated, ${result.errors} errors.`);
-  } catch (error) {
-    console.error('Error updating live scores:', error);
-    alert(`Error updating live scores: ${error.message}`);
-  }
-};
 
 // Auto-sync NFL schedule every 5 minutes
 useEffect(() => {
@@ -181,22 +165,25 @@ useEffect(() => {
   };
 }, [user, currentWeek]); // Depend on user and currentWeek
 
-const handleStandardizeTeamNames = async () => {
-  const confirmed = confirm('This will standardize all team names in the database to use short abbreviations (e.g., "Pittsburgh Steelers" → "PIT"). Continue?');
+const handleClearAllGames = async () => {
+  const confirmed = confirm('⚠️  This will DELETE ALL GAMES from the database! The auto-sync system will repopulate them automatically within 5 minutes. This will fix any duplicates. Are you sure?');
   if (!confirmed) return;
   
+  const doubleConfirm = confirm('🚨 FINAL WARNING: This will permanently delete all game data. Auto-sync will rebuild it. Continue?');
+  if (!doubleConfirm) return;
+  
   try {
-    const result = await standardizeExistingTeamNames();
+    await clearAllGames();
     
-    // Reload current week games to see changes
+    // Reload current week games (will be empty until auto-sync runs)
     if (currentWeek) {
       await loadGames(currentWeek.week_number);
     }
     
-    alert(`Team names standardized! ${result.updated} games updated.`);
+    alert('✅ All games cleared! Auto-sync will repopulate clean data within 5 minutes.');
   } catch (error) {
-    console.error('Error standardizing team names:', error);
-    alert(`Error standardizing team names: ${error.message}`);
+    console.error('Error clearing games:', error);
+    alert(`Error clearing games: ${error.message}`);
   }
 };
   
@@ -405,36 +392,6 @@ const handleStandardizeTeamNames = async () => {
     }
   };
 
-  // Admin functions to load different game types
-  const handleLoadRegularSeasonGames = async () => {
-    if (!currentWeek) {
-      alert('Please create a current week first');
-      return;
-    }
-    
-    try {
-      const games = await loadNFLGames(currentWeek.week_number, 'regular');
-      alert(`Successfully loaded ${games.length} regular season games!`);
-      loadGames(currentWeek.week_number);
-    } catch (error) {
-      alert(`Error loading regular season games: ${error.message}`);
-    }
-  };
-
-  const handleLoadPreseasonGames = async () => {
-    if (!currentWeek) {
-      alert('Please create a current week first');
-      return;
-    }
-    
-    try {
-      const games = await loadNFLGames(currentWeek.week_number, 'preseason');
-      alert(`Successfully loaded ${games.length} preseason games!`);
-      loadGames(currentWeek.week_number);
-    } catch (error) {
-      alert(`Error loading preseason games: ${error.message}`);
-    }
-  };
 
   // Simple signup function - just for auth, profile created separately
   const signUp = async (email, password, username, fullName) => {
@@ -1515,25 +1472,7 @@ const handleStandardizeTeamNames = async () => {
                 <h2 className="text-lg font-semibold">Game Management</h2>
               </div>
               <div className="p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <button
-                    onClick={handleLoadRegularSeasonGames}
-                    className="px-4 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 text-center"
-                  >
-                    Load Regular Season Games for Week {currentWeek?.week_number}
-                  </button>
-                  <button
-                    onClick={handleLoadPreseasonGames}
-                    className="px-4 py-3 bg-green-600 text-white rounded hover:bg-green-700 text-center"
-                  >
-                    Load Preseason Games for Week {currentWeek?.week_number}
-                  </button>
-                  <button
-                    onClick={handleUpdateLiveScores}
-                    className="px-4 py-3 bg-red-600 text-white rounded hover:bg-red-700 text-center"
-                  >
-                    Update Live Scores from ESPN
-                  </button>
+                <div className="grid grid-cols-1 gap-4 mb-6">
                   <button
                     onClick={handleTestWeekDetection}
                     className="px-4 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 text-center"
@@ -1548,10 +1487,10 @@ const handleStandardizeTeamNames = async () => {
                   Update to Detected Week
                 </button>
                 <button
-                  onClick={handleStandardizeTeamNames}
-                  className="px-4 py-3 bg-indigo-600 text-white rounded hover:bg-indigo-700 w-full mb-4"
+                  onClick={handleClearAllGames}
+                  className="px-4 py-3 bg-red-600 text-white rounded hover:bg-red-700 w-full mb-4"
                 >
-                  Standardize Team Names (One-time Fix)
+                  🗑️ Clear All Games (Fix Duplicates)
                 </button>
                 <p className="text-sm text-gray-600">
                   Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
