@@ -70,6 +70,15 @@ const getCurrentNFLWeek = () => {
   }
   
   const weekStart = weekStartTuesday.toISOString().split('T')[0];
+  console.log('🗓️ Week detection debug:', {
+    today: now.toISOString().split('T')[0],
+    dayOfWeek,
+    weekStart,
+    ranges: {
+      p1: `${weekStart} >= 2025-08-06 && ${weekStart} < 2025-08-13 = ${weekStart >= '2025-08-06' && weekStart < '2025-08-13'}`,
+      p2: `${weekStart} >= 2025-08-13 && ${weekStart} < 2025-08-20 = ${weekStart >= '2025-08-13' && weekStart < '2025-08-20'}`
+    }
+  });
   
   // Determine what NFL week this maps to based on preseason schedule
   // Preseason 2025: 
