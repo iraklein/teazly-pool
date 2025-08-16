@@ -13,6 +13,9 @@ const TeazlyPool = () => {
   const [standings, setStandings] = useState([]);
   const [userPicks, setUserPicks] = useState({ pick1: '', pick2: '', pick3: '', pick4: '' });
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
+  const [liveStandings, setLiveStandings] = useState([]);
+  const [allUserPicks, setAllUserPicks] = useState([]);
+  const [isPolling, setIsPolling] = useState(false);
 
   // Helper function to round game times to normal NFL start times
   const roundToNormalGameTime = (apiTime) => {
@@ -525,6 +528,162 @@ const handleUpdateCurrentWeek = async () => {
     }
   };
 
+  // Live standings calculation logic
+  const calculateLiveStandings = () => {
+    if (!allUserPicks.length || !games.length || !currentWeek) return [];
+
+    // Get all users who made picks for this week
+    const usersWithPicks = allUserPicks.reduce((acc, pick) => {
+      if (!acc[pick.user_id]) {
+        acc[pick.user_id] = {
+          user_id: pick.user_id,
+          picks: [],
+          user_info: standings.find(s => s.id === pick.user_id) || { username: 'Unknown', full_name: 'Unknown' }
+        };
+      }
+      acc[pick.user_id].picks.push(pick);
+      return acc;
+    }, {});
+
+    // Calculate win/loss status for each user
+    const userResults = Object.values(usersWithPicks).map(userData => {
+      const { user_id, picks, user_info } = userData;
+      
+      // Check if all games for this user's picks have started
+      const userGames = picks.map(pick => 
+        games.find(g => g.id === pick.game_id)
+      ).filter(Boolean);
+
+      const allGamesStarted = userGames.every(game => 
+        new Date() > new Date(game.game_date)
+      );
+
+      // If not all games started, user is still alive
+      if (!allGamesStarted) {
+        return {
+          user_id,
+          user_info,
+          isAlive: true,
+          completedPicks: 0,
+          totalPicks: picks.length,
+          status: 'waiting'
+        };
+      }
+
+      // Check how many picks are winning
+      let completedPicks = 0;
+      let winningPicks = 0;
+
+      picks.forEach(pick => {
+        const game = games.find(g => g.id === pick.game_id);
+        if (game && game.home_score !== null && game.away_score !== null) {
+          completedPicks++;
+          const isWinning = didPickWin(pick.picked_team, game);
+          if (isWinning) winningPicks++;
+        }
+      });
+
+      // User is alive if all completed picks are winning
+      const isAlive = winningPicks === completedPicks && completedPicks <= picks.length;
+      
+      return {
+        user_id,
+        user_info,
+        isAlive,
+        completedPicks,
+        totalPicks: picks.length,
+        winningPicks,
+        status: completedPicks === picks.length ? 'completed' : 'in_progress'
+      };
+    });
+
+    // Calculate $5 vig winnings
+    const aliveUsers = userResults.filter(user => user.isAlive);
+    const eliminatedUsers = userResults.filter(user => !user.isAlive);
+    
+    const numWinners = aliveUsers.length;
+    const numLosers = eliminatedUsers.length;
+
+    // Each winner gets $5 × number of losers
+    // Each loser pays $5 × number of winners
+    const winnerPayout = numLosers * 5;
+    const loserPayout = -numWinners * 5;
+
+    return userResults.map(user => ({
+      ...user,
+      liveWinnings: user.isAlive ? winnerPayout : loserPayout,
+      projectedTotal: (user.user_info.total_winnings || 0) + (user.isAlive ? winnerPayout : loserPayout)
+    }));
+  };
+
+  // Load all user picks for the current week
+  const loadAllUserPicks = async (weekNumber) => {
+    if (!weekNumber) return;
+
+    const { data: picks } = await supabase
+      .from('picks')
+      .select('*')
+      .eq('week_number', weekNumber);
+
+    setAllUserPicks(picks || []);
+  };
+
+  // Real-time polling for game updates
+  useEffect(() => {
+    if (!currentWeek || !user || currentView !== 'dashboard') return;
+
+    const pollGames = async () => {
+      try {
+        // Reload games to get latest scores
+        const { data: updatedGames } = await supabase
+          .from('games')
+          .select('*')
+          .eq('week_number', currentWeek.week_number)
+          .order('game_date');
+
+        if (updatedGames) {
+          setGames(updatedGames);
+          
+          // Recalculate live standings
+          const liveResults = calculateLiveStandings();
+          setLiveStandings(liveResults);
+        }
+      } catch (error) {
+        console.error('Error polling games:', error);
+      }
+    };
+
+    // Only start polling if any games have started
+    const anyGameStarted = games.some(game => 
+      new Date() > new Date(game.game_date)
+    );
+
+    if (anyGameStarted && !isPolling) {
+      setIsPolling(true);
+      const interval = setInterval(pollGames, 30000); // Poll every 30 seconds
+      
+      return () => {
+        clearInterval(interval);
+        setIsPolling(false);
+      };
+    }
+  }, [currentWeek, games, allUserPicks, user, currentView]);
+
+  // Load all picks when week changes
+  useEffect(() => {
+    if (currentWeek && user) {
+      loadAllUserPicks(currentWeek.week_number);
+    }
+  }, [currentWeek, user]);
+
+  // Recalculate live standings when data changes
+  useEffect(() => {
+    if (allUserPicks.length && games.length) {
+      const liveResults = calculateLiveStandings();
+      setLiveStandings(liveResults);
+    }
+  }, [allUserPicks, games, standings]);
+
   // Auth forms
   const [authMode, setAuthMode] = useState('signin');
   const [authForm, setAuthForm] = useState({
@@ -716,10 +875,17 @@ const handleUpdateCurrentWeek = async () => {
               
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                 <div className="font-medium text-purple-800">
-                  ${currentUserProfile?.total_winnings >= 0 ? '+' : ''}
-                  {currentUserProfile?.total_winnings || 0}
+                  {(() => {
+                    const userLiveResult = liveStandings.find(ls => ls.user_id === user?.id);
+                    if (userLiveResult) {
+                      return `$${userLiveResult.projectedTotal >= 0 ? '+' : ''}${userLiveResult.projectedTotal}`;
+                    }
+                    return `$${currentUserProfile?.total_winnings >= 0 ? '+' : ''}${currentUserProfile?.total_winnings || 0}`;
+                  })()}
                 </div>
-                <p className="text-sm text-purple-600 mt-1">Your Net Win/Loss</p>
+                <p className="text-sm text-purple-600 mt-1">
+                  {liveStandings.find(ls => ls.user_id === user?.id) ? 'Projected Total' : 'Your Net Win/Loss'}
+                </p>
               </div>
             </div>
 
@@ -787,6 +953,84 @@ const handleUpdateCurrentWeek = async () => {
                   <p className="text-sm text-gray-600 mt-2">
                     Choose between regular season or preseason NFL games ({games.length} games currently loaded)
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* Live Standings for Current Week */}
+            {liveStandings.length > 0 && (
+              <div className="bg-white rounded-lg shadow border">
+                <div className="p-4 border-b border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Live Standings - Week {currentWeek?.week_number}</h2>
+                    {isPolling && (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-sm font-medium">Live Updates</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {liveStandings
+                      .sort((a, b) => b.liveWinnings - a.liveWinnings)
+                      .map((userResult) => {
+                        const isCurrentUser = userResult.user_id === user?.id;
+                        return (
+                          <div 
+                            key={userResult.user_id}
+                            className={`border rounded-lg p-4 ${
+                              isCurrentUser ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                            } ${userResult.isAlive ? 'bg-green-50' : 'bg-red-50'}`}
+                          >
+                            <div className="flex justify-between items-center mb-2">
+                              <div>
+                                <div className="font-medium">{userResult.user_info.full_name}</div>
+                                <div className="text-xs text-gray-600">@{userResult.user_info.username}</div>
+                              </div>
+                              <div className={`px-2 py-1 rounded text-xs font-medium ${
+                                userResult.isAlive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
+                                {userResult.isAlive ? 'ALIVE' : 'ELIMINATED'}
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <div className="text-sm">
+                                Picks: {userResult.winningPicks || 0}/{userResult.completedPicks} complete, {userResult.totalPicks} total
+                              </div>
+                              <div className="text-sm">
+                                Status: {userResult.status === 'waiting' ? 'Waiting for games' : 
+                                        userResult.status === 'completed' ? 'All games final' : 'Games in progress'}
+                              </div>
+                              <div className={`text-lg font-bold ${
+                                userResult.liveWinnings > 0 ? 'text-green-600' : 
+                                userResult.liveWinnings < 0 ? 'text-red-600' : 'text-gray-600'
+                              }`}>
+                                ${userResult.liveWinnings >= 0 ? '+' : ''}{userResult.liveWinnings}
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                Projected Total: ${userResult.projectedTotal >= 0 ? '+' : ''}{userResult.projectedTotal}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                  
+                  <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                    <div className="text-sm text-gray-600">
+                      <strong>How it works:</strong> Winners get $5 × number of losers. Losers pay $5 × number of winners.
+                      {liveStandings.filter(u => u.isAlive).length > 0 && liveStandings.filter(u => !u.isAlive).length > 0 && (
+                        <span className="ml-2">
+                          Currently: {liveStandings.filter(u => u.isAlive).length} winners getting $
+                          {liveStandings.filter(u => !u.isAlive).length * 5} each, {liveStandings.filter(u => !u.isAlive).length} losers paying $
+                          {liveStandings.filter(u => u.isAlive).length * 5} each.
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1030,6 +1274,53 @@ const handleUpdateCurrentWeek = async () => {
 
         {currentView === 'scoring' && (
           <div className="space-y-6">
+            {/* Live Standings Summary */}
+            {liveStandings.length > 0 && (
+              <div className="bg-white rounded-lg shadow border">
+                <div className="p-4 border-b border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Live Standings Summary</h2>
+                    {isPolling && (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-sm font-medium">Live Updates</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">
+                        {liveStandings.filter(u => u.isAlive).length}
+                      </div>
+                      <div className="text-sm text-green-600">Still Alive</div>
+                    </div>
+                    <div className="bg-red-50 p-3 rounded-lg">
+                      <div className="text-2xl font-bold text-red-600">
+                        {liveStandings.filter(u => !u.isAlive).length}
+                      </div>
+                      <div className="text-sm text-red-600">Eliminated</div>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">
+                        ${liveStandings.filter(u => u.isAlive).length > 0 ? 
+                          liveStandings.filter(u => !u.isAlive).length * 5 : 0}
+                      </div>
+                      <div className="text-sm text-blue-600">Winner Payout</div>
+                    </div>
+                    <div className="bg-orange-50 p-3 rounded-lg">
+                      <div className="text-2xl font-bold text-orange-600">
+                        ${liveStandings.filter(u => !u.isAlive).length > 0 ? 
+                          liveStandings.filter(u => u.isAlive).length * 5 : 0}
+                      </div>
+                      <div className="text-sm text-orange-600">Loser Payment</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">Week {currentWeek?.week_number || 'N/A'} - Live Scoring</h2>
@@ -1072,9 +1363,47 @@ const handleUpdateCurrentWeek = async () => {
                       </div>
                       
                       <div className="mt-3 pt-3 border-t border-gray-100">
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-gray-600 mb-2">
                           Original Spread: {game.home_team} {game.spread > 0 ? '+' : ''}{game.spread || 'N/A'}
                         </div>
+                        
+                        {/* Show which users picked teams in this game */}
+                        {allUserPicks.length > 0 && (
+                          <div className="space-y-2">
+                            {[game.away_team, game.home_team].map(team => {
+                              const teamPickers = allUserPicks.filter(pick => pick.picked_team === team);
+                              if (teamPickers.length === 0) return null;
+                              
+                              return (
+                                <div key={team} className="text-xs">
+                                  <span className="font-medium">{team} picks:</span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {teamPickers.map(pick => {
+                                      const userInfo = standings.find(s => s.id === pick.user_id);
+                                      const isWinning = game.home_score !== null && game.away_score !== null ? 
+                                        didPickWin(pick.picked_team, game) : null;
+                                      
+                                      return (
+                                        <span
+                                          key={pick.user_id}
+                                          className={`px-2 py-1 rounded text-xs ${
+                                            isWinning === true ? 'bg-green-100 text-green-800' :
+                                            isWinning === false ? 'bg-red-100 text-red-800' :
+                                            'bg-gray-100 text-gray-800'
+                                          }`}
+                                        >
+                                          {userInfo?.username || 'Unknown'}
+                                          {isWinning === true && ' ✓'}
+                                          {isWinning === false && ' ✗'}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
