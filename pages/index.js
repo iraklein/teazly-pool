@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
-import { updateLiveScores } from '../lib/loadGames';
+import { updateLiveScores, autoSyncNFLSchedule } from '../lib/loadGames';
 
 const TeazlyPool = () => {
   const router = useRouter();
@@ -140,6 +140,46 @@ const handleUpdateLiveScores = async () => {
     alert(`Error updating live scores: ${error.message}`);
   }
 };
+
+// Auto-sync NFL schedule every 5 minutes
+useEffect(() => {
+  let syncInterval;
+  
+  const startAutoSync = async () => {
+    console.log('🚀 Starting NFL schedule auto-sync...');
+    
+    // Run initial sync
+    await autoSyncNFLSchedule();
+    
+    // Set up 5-minute interval (300,000 ms)
+    syncInterval = setInterval(async () => {
+      try {
+        const result = await autoSyncNFLSchedule();
+        
+        // If games were updated and we're viewing current week, refresh the display
+        if (result.totalUpdated > 0 && currentWeek) {
+          console.log(`🔄 Auto-sync updated ${result.totalUpdated} games, refreshing current week display`);
+          await loadGames(currentWeek.week_number);
+        }
+      } catch (error) {
+        console.error('Auto-sync interval error:', error);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+  };
+  
+  // Start auto-sync when component mounts and user is authenticated
+  if (user) {
+    startAutoSync();
+  }
+  
+  // Cleanup interval on unmount
+  return () => {
+    if (syncInterval) {
+      console.log('🛑 Stopping NFL schedule auto-sync');
+      clearInterval(syncInterval);
+    }
+  };
+}, [user, currentWeek]); // Depend on user and currentWeek
   
   // Handle URL routing
   useEffect(() => {
@@ -1471,6 +1511,8 @@ const handleUpdateLiveScores = async () => {
                 </button>
                 <p className="text-sm text-gray-600">
                   Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
+                  <br />
+                  NFL schedule auto-syncs every 5 minutes to stay current with real schedule changes
                 </p>
               </div>
             </div>
