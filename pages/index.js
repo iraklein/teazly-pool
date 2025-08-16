@@ -164,6 +164,11 @@ const handleUpdateCurrentWeek = async () => {
     // Reload the page data
     await loadCurrentWeek();
     
+    // Force reload games for the new week
+    setTimeout(() => {
+      loadGames(detectedWeek.week_number);
+    }, 500);
+    
     alert(`✅ Updated current week to: ${detectedWeek.week_name}`);
     
   } catch (error) {
