@@ -345,11 +345,10 @@ useEffect(() => {
       .from('games')
       .select('*')
       .eq('week_number', weekNumber)
-      .eq('season_type', currentWeek?.season_type || 1) // Filter by season type too
       .order('game_date');
 
     setGames(games || []);
-    console.log(`📋 Loaded ${games?.length || 0} games for week ${weekNumber}, season_type ${currentWeek?.season_type || 1}`);
+    console.log(`📋 Loaded ${games?.length || 0} games for week ${weekNumber}`);
   };
 
   // Load user's picks for current week
