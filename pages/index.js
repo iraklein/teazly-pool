@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
+import { autoSyncNFLSchedule, syncLiveScoresOnly, hasLiveGames } from '../lib/loadGames';
 
 const TeazlyPool = () => {
   const router = useRouter();
@@ -13,6 +14,9 @@ const TeazlyPool = () => {
   const [standings, setStandings] = useState([]);
   const [userPicks, setUserPicks] = useState({ pick1: '', pick2: '', pick3: '', pick4: '' });
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
+  const [liveStandings, setLiveStandings] = useState([]);
+  const [allUserPicks, setAllUserPicks] = useState([]);
+  const [isPolling, setIsPolling] = useState(false);
 
   // Helper function to round game times to normal NFL start times
   const roundToNormalGameTime = (apiTime) => {
@@ -25,6 +29,64 @@ const TeazlyPool = () => {
     }
     
     return date.toISOString();
+  };
+
+  // Helper function to format game status for display
+  const formatGameStatus = (game) => {
+    if (!game.status) {
+      // No status, show game time
+      return new Date(game.game_date).toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short', 
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      });
+    }
+    
+    const status = game.status.toLowerCase();
+    
+    switch (status) {
+      case 'status_final':
+      case 'final':
+        return 'FINAL';
+      case 'in_progress':
+      case 'live':
+        // For live games, show quarter and time if available
+        if (game.quarter && game.clock) {
+          return `Q${game.quarter} - ${game.clock}`;
+        } else if (game.quarter) {
+          return `Q${game.quarter}`;
+        }
+        return 'LIVE';
+      case 'halftime':
+        return 'HALFTIME';
+      case 'overtime':
+        return 'OVERTIME';
+      case 'status_scheduled':
+      case 'scheduled':
+      case 'upcoming':
+        // Show actual game time for scheduled games
+        return new Date(game.game_date).toLocaleString('en-US', {
+          weekday: 'short',
+          month: 'short', 
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        });
+      default:
+        // For any unknown status, show game time
+        return new Date(game.game_date).toLocaleString('en-US', {
+          weekday: 'short',
+          month: 'short', 
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        });
+    }
   };
 
 // NFL Calendar Configuration - Step 1: Read-only detection
@@ -41,89 +103,211 @@ const NFL_CALENDAR_2025 = {
   }
 };
 
-// Step 1: Just detect current week (don't change database)
+// Step 1: Detect current week using Tuesday-Monday periods
 const getCurrentNFLWeek = () => {
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  const now = new Date();
   
-  // Check preseason
-  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.preseason)) {
-    if (today >= dates.start && today <= dates.end) {
-      return {
-        season_type: 'preseason',
-        week_number: parseInt(weekKey.replace('week', '')),
-        week_name: `P${parseInt(weekKey.replace('week', ''))}`,
-        detected: true
-      };
-    }
+  // Get the current Tuesday-Monday week period
+  // If today is Monday, we're still in the same week
+  // If today is Tuesday or later, we might be in a new week
+  
+  const dayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, 2=Tuesday, etc.
+  
+  // Calculate the Tuesday that starts the current week
+  let weekStartTuesday = new Date(now);
+  
+  if (dayOfWeek === 0) {
+    // Sunday - go back 5 days to get Tuesday
+    weekStartTuesday.setDate(now.getDate() - 5);
+  } else if (dayOfWeek === 1) {
+    // Monday - go back 6 days to get Tuesday  
+    weekStartTuesday.setDate(now.getDate() - 6);
+  } else if (dayOfWeek === 2) {
+    // Tuesday - use today
+    // weekStartTuesday is already set to today
+  } else {
+    // Wednesday (3) through Saturday (6) - go back to most recent Tuesday
+    weekStartTuesday.setDate(now.getDate() - (dayOfWeek - 2));
   }
   
-  // Check regular season
-  for (const [weekKey, dates] of Object.entries(NFL_CALENDAR_2025.regular)) {
-    if (today >= dates.start && today <= dates.end) {
-      return {
-        season_type: 'regular',
-        week_number: parseInt(weekKey.replace('week', '')),
-        week_name: `W${parseInt(weekKey.replace('week', ''))}`,
-        detected: true
-      };
-    }
+  // TEMPORARY FIX: For this week, force it to Aug 13
+  if (now >= new Date('2025-08-13') && now < new Date('2025-08-20')) {
+    weekStartTuesday = new Date('2025-08-13');
   }
   
-  // Fallback
+  const weekStart = weekStartTuesday.toISOString().split('T')[0];
+  console.log('🗓️ Week detection debug:', {
+    today: now.toISOString().split('T')[0],
+    dayOfWeek,
+    weekStart,
+    ranges: {
+      p1: `${weekStart} >= 2025-08-06 && ${weekStart} < 2025-08-13 = ${weekStart >= '2025-08-06' && weekStart < '2025-08-13'}`,
+      p2: `${weekStart} >= 2025-08-13 && ${weekStart} < 2025-08-20 = ${weekStart >= '2025-08-13' && weekStart < '2025-08-20'}`
+    }
+  });
+  
+  // Determine what NFL week this maps to based on preseason schedule
+  // Preseason 2025: 
+  // P1: Tuesday Aug 6 - Monday Aug 12  
+  // P2: Tuesday Aug 13 - Monday Aug 19  (THIS WEEK - where we are now)
+  // P3: Tuesday Aug 20 - Monday Aug 26
+  
+  if (weekStart >= '2025-08-06' && weekStart < '2025-08-13') {
+    return {
+      season_type: 1,
+      week_number: 1,
+      week_name: 'Preseason Week 1',
+      week_start: weekStart,
+      detected: true
+    };
+  } else if (weekStart >= '2025-08-13' && weekStart < '2025-08-20') {
+    return {
+      season_type: 1,
+      week_number: 2,
+      week_name: 'Preseason Week 2',
+      week_start: weekStart,
+      detected: true
+    };
+  } else if (weekStart >= '2025-08-20' && weekStart < '2025-08-27') {
+    return {
+      season_type: 1,
+      week_number: 3, 
+      week_name: 'Preseason Week 3',
+      week_start: weekStart,
+      detected: true
+    };
+  }
+  
+  // For now, default to P2 since we're in preseason
   return {
-    season_type: 'preseason',
-    week_number: 3,
-    week_name: 'P3',
+    season_type: 1,
+    week_number: 2,
+    week_name: 'Preseason Week 2', 
+    week_start: weekStart,
     detected: false
   };
 };
 
-// Step 1: Test function - just shows what week it detects
-const handleTestWeekDetection = () => {
-  const detectedWeek = getCurrentNFLWeek();
-  alert(`Detected: ${detectedWeek.week_name} (${detectedWeek.season_type} week ${detectedWeek.week_number})\nAuto-detected: ${detectedWeek.detected}`);
-};
-
-// Step 3: Simple function to just toggle is_current
-const handleUpdateCurrentWeek = async () => {
+// Temporary function to set current week
+const setCurrentWeekManually = async () => {
   try {
-    const detectedWeek = getCurrentNFLWeek();
-    console.log('Updating current week to:', detectedWeek);
-    
     // Set all weeks to not current
     await supabase
       .from('weeks')
       .update({ is_current: false })
       .neq('id', '00000000-0000-0000-0000-000000000000');
     
-    // Set the detected week to current
+    // Set week 2, season_type 1 to current
     const { error } = await supabase
       .from('weeks')
       .update({ is_current: true })
-      .eq('week_number', detectedWeek.week_number)
-      .eq('season_type', detectedWeek.season_type);
+      .eq('week_number', 2)
+      .eq('season_type', 1);
     
     if (error) {
-      console.error('Error updating current week:', error);
-      alert(`Error: ${error.message}`);
+      console.error('Error setting current week:', error);
       return;
     }
     
-    // Reload the page data
+    // Reload current week
     await loadCurrentWeek();
     
-    alert(`✅ Updated current week to: ${detectedWeek.week_name}`);
-    
+    alert('✅ Set to Preseason Week 2');
   } catch (error) {
-    console.error('Error in handleUpdateCurrentWeek:', error);
-    alert(`Error: ${error.message}`);
+    console.error('Error:', error);
   }
 };
+
+// Smart polling system with different intervals
+useEffect(() => {
+  let scheduleInterval;
+  let liveScoreInterval;
+  
+  const startSmartPolling = async () => {
+    console.log('🚀 Starting smart NFL polling system...');
+    
+    // Run initial sync
+    await autoSyncNFLSchedule();
+    
+    // 1. Schedule/Odds sync every 5 minutes
+    scheduleInterval = setInterval(async () => {
+      try {
+        // Check if week has changed and reload if needed
+        const detectedWeek = getCurrentNFLWeek();
+        if (currentWeek && (detectedWeek.week_number !== currentWeek.week_number || detectedWeek.season_type !== currentWeek.season_type)) {
+          console.log(`📅 Week change detected: ${currentWeek.week_number} → ${detectedWeek.week_number}, reloading`);
+          await loadCurrentWeek();
+          console.log(`✅ Auto-updated to ${detectedWeek.week_name}`);
+        }
+        
+        const result = await autoSyncNFLSchedule();
+        
+        // If games were updated and we're viewing current week, refresh the display
+        if ((result.totalUpdated > 0 || result.oddsUpdated > 0) && currentWeek) {
+          console.log(`🔄 Schedule sync updated ${result.totalUpdated} games + ${result.oddsUpdated} odds, refreshing display`);
+          await loadGames(currentWeek.week_number);
+        }
+      } catch (error) {
+        console.error('Schedule sync error:', error);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+    
+    // 2. Live score polling function
+    const pollLiveScores = async () => {
+      try {
+        const hasLive = await hasLiveGames();
+        
+        if (hasLive) {
+          if (!isPolling) {
+            setIsPolling(true);
+            console.log('⚡ Live games detected - starting live polling indicator');
+          }
+          
+          console.log('⚡ Live games detected - polling scores every 30 seconds');
+          const result = await syncLiveScoresOnly();
+          
+          if (result.updated > 0 && currentWeek) {
+            console.log(`⚡ Live scores updated ${result.updated} games, refreshing display`);
+            await loadGames(currentWeek.week_number);
+          }
+        } else {
+          if (isPolling) {
+            setIsPolling(false);
+            console.log('🛑 No live games - stopping live polling indicator');
+          }
+        }
+      } catch (error) {
+        console.error('Live score polling error:', error);
+      }
+    };
+    
+    // 3. Smart live score interval - checks every 30 seconds when games are live
+    liveScoreInterval = setInterval(pollLiveScores, 30 * 1000); // 30 seconds
+  };
+  
+  // Start smart polling when component mounts and user is authenticated
+  if (user) {
+    startSmartPolling();
+  }
+  
+  // Cleanup intervals on unmount
+  return () => {
+    if (scheduleInterval) {
+      console.log('🛑 Stopping schedule sync');
+      clearInterval(scheduleInterval);
+    }
+    if (liveScoreInterval) {
+      console.log('🛑 Stopping live score polling');
+      clearInterval(liveScoreInterval);
+    }
+  };
+}, [user, currentWeek]); // Depend on user and currentWeek
+
   
   // Handle URL routing
   useEffect(() => {
     const { view } = router.query;
-    if (view && ['dashboard', 'picks', 'scoring'].includes(view)) {
+    if (view && ['dashboard', 'picks', 'scoring', 'admin'].includes(view)) {
       setCurrentView(view);
     }
   }, [router.query]);
@@ -167,27 +351,43 @@ const handleUpdateCurrentWeek = async () => {
 
   // Load current week data
   const loadCurrentWeek = async () => {
-    const { data: week } = await supabase
-      .from('weeks')
-      .select('*')
-      .eq('is_current', true)
-      .single();
-
-    if (week) {
-      setCurrentWeek(week);
-      loadGames(week.week_number);
-      loadUserPicks(week.week_number);
-    }
+    // Auto-detect current week instead of using weeks table
+    const detectedWeek = getCurrentNFLWeek();
+    
+    const currentWeekData = {
+      week_number: detectedWeek.week_number,
+      season_type: detectedWeek.season_type,
+      year: 2025,
+      is_current: true,
+      pick_count: 4,
+      tease_points: 14,
+      week_name: detectedWeek.week_name
+    };
+    
+    console.log('📅 Auto-detected current week:', currentWeekData);
+    setCurrentWeek(currentWeekData);
+    loadGames(currentWeekData.week_number);
+    loadUserPicks(currentWeekData.week_number);
   };
 
   // Load games for current week
   const loadGames = async (weekNumber) => {
-    const { data: games } = await supabase
+    console.log(`🔍 Loading games for week ${weekNumber}, season_type ${currentWeek?.season_type}...`);
+    
+    const { data: games, error } = await supabase
       .from('games')
       .select('*')
       .eq('week_number', weekNumber)
+      .eq('season_type', currentWeek?.season_type || 1)
       .order('game_date');
 
+    if (error) {
+      console.error('❌ Error loading games:', error);
+      return;
+    }
+
+    console.log(`📋 Found ${games?.length || 0} games for week ${weekNumber}, season_type ${currentWeek?.season_type}:`, games);
+    
     setGames(games || []);
   };
 
@@ -268,16 +468,36 @@ const handleUpdateCurrentWeek = async () => {
           }
         }
         
+        // Standardize team names (The Odds API usually returns abbreviations, but let's be safe)
+        const standardizeTeamName = (name) => {
+          if (!name) return name;
+          // Common mapping for The Odds API variations
+          const nameMap = {
+            'Las Vegas Raiders': 'LV',
+            'Los Angeles Rams': 'LAR', 
+            'Los Angeles Chargers': 'LAC',
+            'New York Giants': 'NYG',
+            'New York Jets': 'NYJ',
+            'New England Patriots': 'NE',
+            'San Francisco 49ers': 'SF',
+            'Tampa Bay Buccaneers': 'TB',
+            'Green Bay Packers': 'GB',
+            'Kansas City Chiefs': 'KC'
+          };
+          return nameMap[name] || name;
+        };
+
         return {
           id: game.id,
           week_number: weekNumber,
-          home_team: game.home_team,
-          away_team: game.away_team,
+          home_team: standardizeTeamName(game.home_team),
+          away_team: standardizeTeamName(game.away_team),
           spread: spread,
           game_date: roundToNormalGameTime(game.commence_time),
           status: 'upcoming',
           home_score: null,
-          away_score: null
+          away_score: null,
+          season_type: gameType === 'preseason' ? 1 : 2 // Set correct season type
         };
       });
       
@@ -305,36 +525,6 @@ const handleUpdateCurrentWeek = async () => {
     }
   };
 
-  // Admin functions to load different game types
-  const handleLoadRegularSeasonGames = async () => {
-    if (!currentWeek) {
-      alert('Please create a current week first');
-      return;
-    }
-    
-    try {
-      const games = await loadNFLGames(currentWeek.week_number, 'regular');
-      alert(`Successfully loaded ${games.length} regular season games!`);
-      loadGames(currentWeek.week_number);
-    } catch (error) {
-      alert(`Error loading regular season games: ${error.message}`);
-    }
-  };
-
-  const handleLoadPreseasonGames = async () => {
-    if (!currentWeek) {
-      alert('Please create a current week first');
-      return;
-    }
-    
-    try {
-      const games = await loadNFLGames(currentWeek.week_number, 'preseason');
-      alert(`Successfully loaded ${games.length} preseason games!`);
-      loadGames(currentWeek.week_number);
-    } catch (error) {
-      alert(`Error loading preseason games: ${error.message}`);
-    }
-  };
 
   // Simple signup function - just for auth, profile created separately
   const signUp = async (email, password, username, fullName) => {
@@ -525,6 +715,122 @@ const handleUpdateCurrentWeek = async () => {
     }
   };
 
+  // Live standings calculation logic
+  const calculateLiveStandings = () => {
+    if (!allUserPicks.length || !games.length || !currentWeek) return [];
+
+    // Get all users who made picks for this week
+    const usersWithPicks = allUserPicks.reduce((acc, pick) => {
+      if (!acc[pick.user_id]) {
+        acc[pick.user_id] = {
+          user_id: pick.user_id,
+          picks: [],
+          user_info: standings.find(s => s.id === pick.user_id) || { username: 'Unknown', full_name: 'Unknown' }
+        };
+      }
+      acc[pick.user_id].picks.push(pick);
+      return acc;
+    }, {});
+
+    // Calculate win/loss status for each user
+    const userResults = Object.values(usersWithPicks).map(userData => {
+      const { user_id, picks, user_info } = userData;
+      
+      // Check if all games for this user's picks have started
+      const userGames = picks.map(pick => 
+        games.find(g => g.id === pick.game_id)
+      ).filter(Boolean);
+
+      const allGamesStarted = userGames.every(game => 
+        new Date() > new Date(game.game_date)
+      );
+
+      // If not all games started, user is still alive
+      if (!allGamesStarted) {
+        return {
+          user_id,
+          user_info,
+          isAlive: true,
+          completedPicks: 0,
+          totalPicks: picks.length,
+          status: 'waiting'
+        };
+      }
+
+      // Check how many picks are winning
+      let completedPicks = 0;
+      let winningPicks = 0;
+
+      picks.forEach(pick => {
+        const game = games.find(g => g.id === pick.game_id);
+        if (game && game.home_score !== null && game.away_score !== null) {
+          completedPicks++;
+          const isWinning = didPickWin(pick.picked_team, game);
+          if (isWinning) winningPicks++;
+        }
+      });
+
+      // User is alive if all completed picks are winning
+      const isAlive = winningPicks === completedPicks && completedPicks <= picks.length;
+      
+      return {
+        user_id,
+        user_info,
+        isAlive,
+        completedPicks,
+        totalPicks: picks.length,
+        winningPicks,
+        status: completedPicks === picks.length ? 'completed' : 'in_progress'
+      };
+    });
+
+    // Calculate $5 vig winnings
+    const aliveUsers = userResults.filter(user => user.isAlive);
+    const eliminatedUsers = userResults.filter(user => !user.isAlive);
+    
+    const numWinners = aliveUsers.length;
+    const numLosers = eliminatedUsers.length;
+
+    // Each winner gets $5 × number of losers
+    // Each loser pays $5 × number of winners
+    const winnerPayout = numLosers * 5;
+    const loserPayout = -numWinners * 5;
+
+    return userResults.map(user => ({
+      ...user,
+      liveWinnings: user.isAlive ? winnerPayout : loserPayout,
+      projectedTotal: (user.user_info.total_winnings || 0) + (user.isAlive ? winnerPayout : loserPayout)
+    }));
+  };
+
+  // Load all user picks for the current week
+  const loadAllUserPicks = async (weekNumber) => {
+    if (!weekNumber) return;
+
+    const { data: picks } = await supabase
+      .from('picks')
+      .select('*')
+      .eq('week_number', weekNumber);
+
+    setAllUserPicks(picks || []);
+  };
+
+
+  // Load all picks when week changes
+  useEffect(() => {
+    if (currentWeek && user) {
+      loadAllUserPicks(currentWeek.week_number);
+    }
+  }, [currentWeek, user]);
+
+  // Recalculate live standings when data changes
+  useEffect(() => {
+    if (allUserPicks.length && games.length) {
+      const liveResults = calculateLiveStandings();
+      setLiveStandings(liveResults);
+    }
+  }, [allUserPicks, games, standings]);
+
   // Auth forms
   const [authMode, setAuthMode] = useState('signin');
   const [authForm, setAuthForm] = useState({
@@ -692,6 +998,19 @@ const handleUpdateCurrentWeek = async () => {
             >
               Live Scoring
             </button>
+            {/* Admin Tab - Only show for admins */}
+            {currentUserProfile?.is_admin && (
+              <button
+                onClick={() => navigateTo('admin')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  currentView === 'admin' 
+                    ? 'border-blue-500 text-blue-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Admin
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -716,77 +1035,95 @@ const handleUpdateCurrentWeek = async () => {
               
               <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                 <div className="font-medium text-purple-800">
-                  ${currentUserProfile?.total_winnings >= 0 ? '+' : ''}
-                  {currentUserProfile?.total_winnings || 0}
+                  {(() => {
+                    const userLiveResult = liveStandings.find(ls => ls.user_id === user?.id);
+                    if (userLiveResult) {
+                      return `$${userLiveResult.projectedTotal >= 0 ? '+' : ''}${userLiveResult.projectedTotal}`;
+                    }
+                    return `$${currentUserProfile?.total_winnings >= 0 ? '+' : ''}${currentUserProfile?.total_winnings || 0}`;
+                  })()}
                 </div>
-                <p className="text-sm text-purple-600 mt-1">Your Net Win/Loss</p>
+                <p className="text-sm text-purple-600 mt-1">
+                  {liveStandings.find(ls => ls.user_id === user?.id) ? 'Projected Total' : 'Your Net Win/Loss'}
+                </p>
               </div>
             </div>
 
-            {/* Admin Actions Section - Only for Admins */}
-            {currentWeek && currentUserProfile?.is_admin && (
+
+            {/* Live Standings for Current Week */}
+            {liveStandings.length > 0 && (
               <div className="bg-white rounded-lg shadow border">
                 <div className="p-4 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold">Admin Actions</h3>
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Live Standings - Week {currentWeek?.week_number}</h2>
+                    {isPolling && (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-sm font-medium">Live Updates</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="p-4">
-                  <div className="space-y-3">
-                    <button
-                      onClick={handleLoadRegularSeasonGames}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mr-3"
-                    >
-                      Load Regular Season Games for Week {currentWeek.week_number}
-                    </button>
-                    <button
-                      onClick={handleLoadPreseasonGames}
-                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                    >
-                      Load Preseason Games for Week {currentWeek.week_number}
-                    </button>
-
-                    <button
-                      onClick={handleTestWeekDetection}
-                      className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
-                    >
-                      Test Week Detection
-                    </button>
-
-                    <button
-                      onClick={handleUpdateCurrentWeek}
-                      className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-                    >
-                      Update to Detected Week
-                    </button>
-                  </div>
-                  <div className="space-y-3 mt-3">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleSetPickDeadline}
-                        className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-                      >
-                        Set Pick Deadline
-                      </button>
-                      {currentWeek.pick_deadline && (
-                        <>
-                          <button
-                            onClick={handleClearPickDeadline}
-                            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {liveStandings
+                      .sort((a, b) => b.liveWinnings - a.liveWinnings)
+                      .map((userResult) => {
+                        const isCurrentUser = userResult.user_id === user?.id;
+                        return (
+                          <div 
+                            key={userResult.user_id}
+                            className={`border rounded-lg p-4 ${
+                              isCurrentUser ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                            } ${userResult.isAlive ? 'bg-green-50' : 'bg-red-50'}`}
                           >
-                            Clear Deadline
-                          </button>
-                          <div className="text-sm">
-                            <span className={`font-medium ${arePicksLocked() ? 'text-red-600' : 'text-green-600'}`}>
-                              Deadline: {new Date(currentWeek.pick_deadline).toLocaleString()}
-                              {arePicksLocked() && ' (LOCKED)'}
-                            </span>
+                            <div className="flex justify-between items-center mb-2">
+                              <div>
+                                <div className="font-medium">{userResult.user_info.full_name}</div>
+                                <div className="text-xs text-gray-600">@{userResult.user_info.username}</div>
+                              </div>
+                              <div className={`px-2 py-1 rounded text-xs font-medium ${
+                                userResult.isAlive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
+                                {userResult.isAlive ? 'ALIVE' : 'ELIMINATED'}
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <div className="text-sm">
+                                Picks: {userResult.winningPicks || 0}/{userResult.completedPicks} complete, {userResult.totalPicks} total
+                              </div>
+                              <div className="text-sm">
+                                Status: {userResult.status === 'waiting' ? 'Waiting for games' : 
+                                        userResult.status === 'completed' ? 'All games final' : 'Games in progress'}
+                              </div>
+                              <div className={`text-lg font-bold ${
+                                userResult.liveWinnings > 0 ? 'text-green-600' : 
+                                userResult.liveWinnings < 0 ? 'text-red-600' : 'text-gray-600'
+                              }`}>
+                                ${userResult.liveWinnings >= 0 ? '+' : ''}{userResult.liveWinnings}
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                Projected Total: ${userResult.projectedTotal >= 0 ? '+' : ''}{userResult.projectedTotal}
+                              </div>
+                            </div>
                           </div>
-                        </>
+                        );
+                      })}
+                  </div>
+                  
+                  <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                    <div className="text-sm text-gray-600">
+                      <strong>How it works:</strong> Winners get $5 × number of losers. Losers pay $5 × number of winners.
+                      {liveStandings.filter(u => u.isAlive).length > 0 && liveStandings.filter(u => !u.isAlive).length > 0 && (
+                        <span className="ml-2">
+                          Currently: {liveStandings.filter(u => u.isAlive).length} winners getting $
+                          {liveStandings.filter(u => !u.isAlive).length * 5} each, {liveStandings.filter(u => !u.isAlive).length} losers paying $
+                          {liveStandings.filter(u => u.isAlive).length * 5} each.
+                        </span>
                       )}
                     </div>
                   </div>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Choose between regular season or preseason NFL games ({games.length} games currently loaded)
-                  </p>
                 </div>
               </div>
             )}
@@ -868,11 +1205,8 @@ const handleUpdateCurrentWeek = async () => {
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
-                  Week {currentWeek?.week_number || 'N/A'} - 4-Team Teaser (+14 Points)
+                  {currentWeek?.week_name || `Week ${currentWeek?.week_number || 'N/A'}`}
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Pick 4 teams. All must win (with 14-point tease) to win the week.
-                </p>
               </div>
               
               <div className="p-4">
@@ -1030,57 +1364,279 @@ const handleUpdateCurrentWeek = async () => {
 
         {currentView === 'scoring' && (
           <div className="space-y-6">
+            {/* Live Standings Summary */}
+            {liveStandings.length > 0 && (
+              <div className="bg-white rounded-lg shadow border">
+                <div className="p-4 border-b border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-lg font-semibold">Live Standings Summary</h2>
+                    {isPolling && (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-sm font-medium">Live Updates</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div className="bg-green-50 p-3 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">
+                        {liveStandings.filter(u => u.isAlive).length}
+                      </div>
+                      <div className="text-sm text-green-600">Still Alive</div>
+                    </div>
+                    <div className="bg-red-50 p-3 rounded-lg">
+                      <div className="text-2xl font-bold text-red-600">
+                        {liveStandings.filter(u => !u.isAlive).length}
+                      </div>
+                      <div className="text-sm text-red-600">Eliminated</div>
+                    </div>
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">
+                        ${liveStandings.filter(u => u.isAlive).length > 0 ? 
+                          liveStandings.filter(u => !u.isAlive).length * 5 : 0}
+                      </div>
+                      <div className="text-sm text-blue-600">Winner Payout</div>
+                    </div>
+                    <div className="bg-orange-50 p-3 rounded-lg">
+                      <div className="text-2xl font-bold text-orange-600">
+                        ${liveStandings.filter(u => !u.isAlive).length > 0 ? 
+                          liveStandings.filter(u => u.isAlive).length * 5 : 0}
+                      </div>
+                      <div className="text-sm text-orange-600">Loser Payment</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">Week {currentWeek?.week_number || 'N/A'} - Live Scoring</h2>
               </div>
               <div className="p-4">
                 <div className="space-y-4">
-                  {games.map((game) => (
-                    <div key={game.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <div className="font-medium">{game.away_team} @ {game.home_team}</div>
-                        <div className={`px-2 py-1 rounded text-sm ${
-                          game.status === 'final' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'
-                        }`}>
-                          {game.status.toUpperCase()}
+                  {games.map((game) => {
+                    const gameTime = new Date(game.game_date);
+                    const now = new Date();
+                    const hasStarted = now > gameTime;
+                    const hasScores = game.home_score !== null && game.away_score !== null;
+                    
+                    return (
+                      <div key={game.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <div className="font-medium">{game.away_team} @ {game.home_team}</div>
+                          <div className="text-right">
+                            {!hasStarted ? (
+                              <div className="text-sm text-gray-600">
+                                {gameTime.toLocaleDateString('en-US', { 
+                                  weekday: 'short', 
+                                  month: 'short', 
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  timeZoneName: 'short'
+                                })}
+                              </div>
+                            ) : (
+                              <div className={`px-2 py-1 rounded text-sm ${
+                                game.status === 'final' || game.status === 'status_final' ? 'bg-gray-100 text-gray-800' : 
+                                hasStarted ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {formatGameStatus(game)}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
                       
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">{game.away_score || '-'}</div>
-                          <div className="font-medium">{game.away_team}</div>
-                          <div className="text-sm text-gray-600">
-                            +{getTeaseSpread(game.away_team, game)} (teased)
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold">
+                              {hasStarted && hasScores ? game.away_score : '-'}
+                            </div>
+                            <div className="font-medium">{game.away_team}</div>
+                            <div className="text-sm text-gray-600">
+                              +{getTeaseSpread(game.away_team, game)} (teased)
+                            </div>
+                            {hasStarted && hasScores && (
+                              <div className="text-sm font-medium">
+                                Teased Score: {game.away_score + getTeaseSpread(game.away_team, game)}
+                              </div>
+                            )}
                           </div>
-                          <div className="text-sm font-medium">
-                            Teased Score: {game.away_score ? game.away_score + getTeaseSpread(game.away_team, game) : '-'}
+                          
+                          <div className="text-center">
+                            <div className="text-2xl font-bold">
+                              {hasStarted && hasScores ? game.home_score : '-'}
+                            </div>
+                            <div className="font-medium">{game.home_team}</div>
+                            <div className="text-sm text-gray-600">
+                              {getTeaseSpread(game.home_team, game) > 0 ? '+' : ''}{getTeaseSpread(game.home_team, game)} (teased)
+                            </div>
+                            {hasStarted && hasScores && (
+                              <div className="text-sm font-medium">
+                                Teased Score: {game.home_score + getTeaseSpread(game.home_team, game)}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">{game.home_score || '-'}</div>
-                          <div className="font-medium">{game.home_team}</div>
-                          <div className="text-sm text-gray-600">
-                            {getTeaseSpread(game.home_team, game) > 0 ? '+' : ''}{getTeaseSpread(game.home_team, game)} (teased)
-                          </div>
-                          <div className="text-sm font-medium">
-                            Teased Score: {game.home_score ? game.home_score + getTeaseSpread(game.home_team, game) : '-'}
-                          </div>
-                        </div>
-                      </div>
                       
                       <div className="mt-3 pt-3 border-t border-gray-100">
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-gray-600 mb-2">
                           Original Spread: {game.home_team} {game.spread > 0 ? '+' : ''}{game.spread || 'N/A'}
                         </div>
+                        
+                        {/* Show which users picked teams in this game */}
+                        {allUserPicks.length > 0 && (
+                          <div className="space-y-2">
+                            {[game.away_team, game.home_team].map(team => {
+                              const teamPickers = allUserPicks.filter(pick => pick.picked_team === team);
+                              if (teamPickers.length === 0) return null;
+                              
+                              return (
+                                <div key={team} className="text-xs">
+                                  <span className="font-medium">{team} picks:</span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {teamPickers.map(pick => {
+                                      const userInfo = standings.find(s => s.id === pick.user_id);
+                                      const isWinning = game.home_score !== null && game.away_score !== null ? 
+                                        didPickWin(pick.picked_team, game) : null;
+                                      
+                                      return (
+                                        <span
+                                          key={pick.user_id}
+                                          className={`px-2 py-1 rounded text-xs ${
+                                            isWinning === true ? 'bg-green-100 text-green-800' :
+                                            isWinning === false ? 'bg-red-100 text-red-800' :
+                                            'bg-gray-100 text-gray-800'
+                                          }`}
+                                        >
+                                          {userInfo?.username || 'Unknown'}
+                                          {isWinning === true && ' ✓'}
+                                          {isWinning === false && ' ✗'}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Admin View - Only accessible by admin users */}
+        {currentView === 'admin' && !currentUserProfile?.is_admin && (
+          <div className="space-y-6">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+              <h2 className="text-xl font-semibold text-red-800 mb-2">Access Denied</h2>
+              <p className="text-red-600 mb-4">You don't have permission to access the admin panel.</p>
+              <button
+                onClick={() => navigateTo('dashboard')}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {currentView === 'admin' && currentUserProfile?.is_admin && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow border">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold">Game Management</h2>
+              </div>
+              <div className="p-4">
+                <button
+                  onClick={setCurrentWeekManually}
+                  className="px-4 py-3 bg-red-600 text-white rounded hover:bg-red-700 w-full mb-4"
+                >
+                  EMERGENCY: Set to Preseason Week 2
+                </button>
+                <p className="text-sm text-gray-600">
+                  Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
+                  <br />
+                  NFL schedule auto-syncs every 5 minutes. Current week auto-updates every Tuesday.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow border">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold">Pick Management</h2>
+              </div>
+              <div className="p-4">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleSetPickDeadline}
+                      className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                    >
+                      Set Pick Deadline
+                    </button>
+                    {currentWeek?.pick_deadline && (
+                      <button
+                        onClick={handleClearPickDeadline}
+                        className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                      >
+                        Clear Deadline
+                      </button>
+                    )}
+                  </div>
+                  {currentWeek?.pick_deadline && (
+                    <div className="text-sm">
+                      <span className={`font-medium ${arePicksLocked() ? 'text-red-600' : 'text-green-600'}`}>
+                        Current Deadline: {new Date(currentWeek.pick_deadline).toLocaleString()}
+                        {arePicksLocked() && ' (LOCKED)'}
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-600">
+                    Manage pick deadlines and game locking for the current week
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {currentWeek && (
+              <div className="bg-white rounded-lg shadow border">
+                <div className="p-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold">Current Week Status</h2>
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {currentWeek.week_number}
+                      </div>
+                      <div className="text-sm text-gray-600">Week Number</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {games.length}
+                      </div>
+                      <div className="text-sm text-gray-600">Games Loaded</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {currentWeek.tease_points || 14}
+                      </div>
+                      <div className="text-sm text-gray-600">Tease Points</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
