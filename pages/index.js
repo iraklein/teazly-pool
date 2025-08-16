@@ -33,7 +33,17 @@ const TeazlyPool = () => {
 
   // Helper function to format game status for display
   const formatGameStatus = (game) => {
-    if (!game.status) return 'UPCOMING';
+    if (!game.status) {
+      // No status, show game time
+      return new Date(game.game_date).toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short', 
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      });
+    }
     
     const status = game.status.toLowerCase();
     
@@ -57,9 +67,25 @@ const TeazlyPool = () => {
       case 'status_scheduled':
       case 'scheduled':
       case 'upcoming':
-        return 'UPCOMING';
+        // Show actual game time for scheduled games
+        return new Date(game.game_date).toLocaleString('en-US', {
+          weekday: 'short',
+          month: 'short', 
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        });
       default:
-        return status.replace(/_/g, ' ').toUpperCase();
+        // For any unknown status, show game time
+        return new Date(game.game_date).toLocaleString('en-US', {
+          weekday: 'short',
+          month: 'short', 
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short'
+        });
     }
   };
 
