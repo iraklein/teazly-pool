@@ -54,6 +54,10 @@ const TeazlyPool = () => {
         return 'HALFTIME';
       case 'overtime':
         return 'OVERTIME';
+      case 'status_scheduled':
+      case 'scheduled':
+      case 'upcoming':
+        return 'UPCOMING';
       default:
         return status.replace(/_/g, ' ').toUpperCase();
     }
