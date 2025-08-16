@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
-import { autoSyncNFLSchedule } from '../lib/loadGames';
+import { autoSyncNFLSchedule, syncLiveScoresOnly, hasLiveGames } from '../lib/loadGames';
 
 const TeazlyPool = () => {
   const router = useRouter();
@@ -125,42 +125,79 @@ const handleUpdateCurrentWeek = async () => {
 };
 
 
-// Auto-sync NFL schedule every 5 minutes
+// Smart polling system with different intervals
 useEffect(() => {
-  let syncInterval;
+  let scheduleInterval;
+  let liveScoreInterval;
   
-  const startAutoSync = async () => {
-    console.log('🚀 Starting NFL schedule auto-sync...');
+  const startSmartPolling = async () => {
+    console.log('🚀 Starting smart NFL polling system...');
     
     // Run initial sync
     await autoSyncNFLSchedule();
     
-    // Set up 5-minute interval (300,000 ms)
-    syncInterval = setInterval(async () => {
+    // 1. Schedule/Odds sync every 5 minutes
+    scheduleInterval = setInterval(async () => {
       try {
         const result = await autoSyncNFLSchedule();
         
         // If games were updated and we're viewing current week, refresh the display
         if ((result.totalUpdated > 0 || result.oddsUpdated > 0) && currentWeek) {
-          console.log(`🔄 Auto-sync updated ${result.totalUpdated} games + ${result.oddsUpdated} odds, refreshing current week display`);
+          console.log(`🔄 Schedule sync updated ${result.totalUpdated} games + ${result.oddsUpdated} odds, refreshing display`);
           await loadGames(currentWeek.week_number);
         }
       } catch (error) {
-        console.error('Auto-sync interval error:', error);
+        console.error('Schedule sync error:', error);
       }
     }, 5 * 60 * 1000); // 5 minutes
+    
+    // 2. Live score polling function
+    const pollLiveScores = async () => {
+      try {
+        const hasLive = await hasLiveGames();
+        
+        if (hasLive) {
+          if (!isPolling) {
+            setIsPolling(true);
+            console.log('⚡ Live games detected - starting live polling indicator');
+          }
+          
+          console.log('⚡ Live games detected - polling scores every 30 seconds');
+          const result = await syncLiveScoresOnly();
+          
+          if (result.updated > 0 && currentWeek) {
+            console.log(`⚡ Live scores updated ${result.updated} games, refreshing display`);
+            await loadGames(currentWeek.week_number);
+          }
+        } else {
+          if (isPolling) {
+            setIsPolling(false);
+            console.log('🛑 No live games - stopping live polling indicator');
+          }
+        }
+      } catch (error) {
+        console.error('Live score polling error:', error);
+      }
+    };
+    
+    // 3. Smart live score interval - checks every 30 seconds when games are live
+    liveScoreInterval = setInterval(pollLiveScores, 30 * 1000); // 30 seconds
   };
   
-  // Start auto-sync when component mounts and user is authenticated
+  // Start smart polling when component mounts and user is authenticated
   if (user) {
-    startAutoSync();
+    startSmartPolling();
   }
   
-  // Cleanup interval on unmount
+  // Cleanup intervals on unmount
   return () => {
-    if (syncInterval) {
-      console.log('🛑 Stopping NFL schedule auto-sync');
-      clearInterval(syncInterval);
+    if (scheduleInterval) {
+      console.log('🛑 Stopping schedule sync');
+      clearInterval(scheduleInterval);
+    }
+    if (liveScoreInterval) {
+      console.log('🛑 Stopping live score polling');
+      clearInterval(liveScoreInterval);
     }
   };
 }, [user, currentWeek]); // Depend on user and currentWeek
@@ -661,51 +698,6 @@ useEffect(() => {
     setAllUserPicks(picks || []);
   };
 
-  // Real-time polling for game updates
-  useEffect(() => {
-    if (!currentWeek || !user || currentView !== 'dashboard') return;
-
-    const pollGames = async () => {
-      try {
-        // First, update live scores from ESPN
-        console.log('Polling: Fetching live scores from ESPN...');
-        const scoreUpdate = await updateLiveScores();
-        console.log(`Polling: Updated ${scoreUpdate.updated} games, ${scoreUpdate.errors} errors`);
-        
-        // Then reload games from database to get latest scores
-        const { data: updatedGames } = await supabase
-          .from('games')
-          .select('*')
-          .eq('week_number', currentWeek.week_number)
-          .order('game_date');
-
-        if (updatedGames) {
-          setGames(updatedGames);
-          
-          // Recalculate live standings
-          const liveResults = calculateLiveStandings();
-          setLiveStandings(liveResults);
-        }
-      } catch (error) {
-        console.error('Error polling games:', error);
-      }
-    };
-
-    // Only start polling if any games have started
-    const anyGameStarted = games.some(game => 
-      new Date() > new Date(game.game_date)
-    );
-
-    if (anyGameStarted && !isPolling) {
-      setIsPolling(true);
-      const interval = setInterval(pollGames, 30000); // Poll every 30 seconds
-      
-      return () => {
-        clearInterval(interval);
-        setIsPolling(false);
-      };
-    }
-  }, [currentWeek, games, allUserPicks, user, currentView]);
 
   // Load all picks when week changes
   useEffect(() => {
