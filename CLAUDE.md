@@ -69,7 +69,8 @@ This project requires environment variables in `.env.local`:
 
 ### API Integration Points
 - **Supabase Client**: `lib/supabase.js` - shared client instance
-- **ESPN Games**: `lib/loadGames.js` - game loading utilities
+- **ESPN Games**: `lib/loadGames.js` - game loading utilities with live score updates
+- **ESPN Live Scores**: `updateLiveScores()` function automatically fetches scores every 30 seconds
 - **The Odds API**: Direct fetch calls in main component for spreads
 
 ### Security & Access Control

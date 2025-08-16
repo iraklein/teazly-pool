@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
+import { updateLiveScores } from '../lib/loadGames';
 
 const TeazlyPool = () => {
   const router = useRouter();
@@ -120,6 +121,23 @@ const handleUpdateCurrentWeek = async () => {
   } catch (error) {
     console.error('Error in handleUpdateCurrentWeek:', error);
     alert(`Error: ${error.message}`);
+  }
+};
+
+// Manual live score update handler for admins
+const handleUpdateLiveScores = async () => {
+  try {
+    const result = await updateLiveScores();
+    
+    // Reload games to reflect the updates
+    if (currentWeek) {
+      await loadGames(currentWeek.week_number);
+    }
+    
+    alert(`Live scores updated! ${result.updated} games updated, ${result.errors} errors.`);
+  } catch (error) {
+    console.error('Error updating live scores:', error);
+    alert(`Error updating live scores: ${error.message}`);
   }
 };
   
@@ -634,7 +652,12 @@ const handleUpdateCurrentWeek = async () => {
 
     const pollGames = async () => {
       try {
-        // Reload games to get latest scores
+        // First, update live scores from ESPN
+        console.log('Polling: Fetching live scores from ESPN...');
+        const scoreUpdate = await updateLiveScores();
+        console.log(`Polling: Updated ${scoreUpdate.updated} games, ${scoreUpdate.errors} errors`);
+        
+        // Then reload games from database to get latest scores
         const { data: updatedGames } = await supabase
           .from('games')
           .select('*')
@@ -922,6 +945,13 @@ const handleUpdateCurrentWeek = async () => {
                       className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
                     >
                       Update to Detected Week
+                    </button>
+
+                    <button
+                      onClick={handleUpdateLiveScores}
+                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                    >
+                      Update Live Scores from ESPN
                     </button>
                   </div>
                   <div className="space-y-3 mt-3">
