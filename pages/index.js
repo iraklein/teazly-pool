@@ -144,7 +144,7 @@ const handleUpdateLiveScores = async () => {
   // Handle URL routing
   useEffect(() => {
     const { view } = router.query;
-    if (view && ['dashboard', 'picks', 'scoring'].includes(view)) {
+    if (view && ['dashboard', 'picks', 'scoring', 'admin'].includes(view)) {
       setCurrentView(view);
     }
   }, [router.query]);
@@ -874,6 +874,19 @@ const handleUpdateLiveScores = async () => {
             >
               Live Scoring
             </button>
+            {/* Admin Tab - Only show for admins */}
+            {currentUserProfile?.is_admin && (
+              <button
+                onClick={() => navigateTo('admin')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  currentView === 'admin' 
+                    ? 'border-blue-500 text-blue-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Admin
+              </button>
+            )}
           </div>
         </div>
       </nav>
@@ -912,80 +925,6 @@ const handleUpdateLiveScores = async () => {
               </div>
             </div>
 
-            {/* Admin Actions Section - Only for Admins */}
-            {currentWeek && currentUserProfile?.is_admin && (
-              <div className="bg-white rounded-lg shadow border">
-                <div className="p-4 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold">Admin Actions</h3>
-                </div>
-                <div className="p-4">
-                  <div className="space-y-3">
-                    <button
-                      onClick={handleLoadRegularSeasonGames}
-                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mr-3"
-                    >
-                      Load Regular Season Games for Week {currentWeek.week_number}
-                    </button>
-                    <button
-                      onClick={handleLoadPreseasonGames}
-                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                    >
-                      Load Preseason Games for Week {currentWeek.week_number}
-                    </button>
-
-                    <button
-                      onClick={handleTestWeekDetection}
-                      className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
-                    >
-                      Test Week Detection
-                    </button>
-
-                    <button
-                      onClick={handleUpdateCurrentWeek}
-                      className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-                    >
-                      Update to Detected Week
-                    </button>
-
-                    <button
-                      onClick={handleUpdateLiveScores}
-                      className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                    >
-                      Update Live Scores from ESPN
-                    </button>
-                  </div>
-                  <div className="space-y-3 mt-3">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleSetPickDeadline}
-                        className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
-                      >
-                        Set Pick Deadline
-                      </button>
-                      {currentWeek.pick_deadline && (
-                        <>
-                          <button
-                            onClick={handleClearPickDeadline}
-                            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                          >
-                            Clear Deadline
-                          </button>
-                          <div className="text-sm">
-                            <span className={`font-medium ${arePicksLocked() ? 'text-red-600' : 'text-green-600'}`}>
-                              Deadline: {new Date(currentWeek.pick_deadline).toLocaleString()}
-                              {arePicksLocked() && ' (LOCKED)'}
-                            </span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Choose between regular season or preseason NFL games ({games.length} games currently loaded)
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* Live Standings for Current Week */}
             {liveStandings.length > 0 && (
@@ -1471,6 +1410,136 @@ const handleUpdateLiveScores = async () => {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Admin View - Only accessible by admin users */}
+        {currentView === 'admin' && !currentUserProfile?.is_admin && (
+          <div className="space-y-6">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+              <h2 className="text-xl font-semibold text-red-800 mb-2">Access Denied</h2>
+              <p className="text-red-600 mb-4">You don't have permission to access the admin panel.</p>
+              <button
+                onClick={() => navigateTo('dashboard')}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {currentView === 'admin' && currentUserProfile?.is_admin && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow border">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold">Game Management</h2>
+              </div>
+              <div className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <button
+                    onClick={handleLoadRegularSeasonGames}
+                    className="px-4 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 text-center"
+                  >
+                    Load Regular Season Games for Week {currentWeek?.week_number}
+                  </button>
+                  <button
+                    onClick={handleLoadPreseasonGames}
+                    className="px-4 py-3 bg-green-600 text-white rounded hover:bg-green-700 text-center"
+                  >
+                    Load Preseason Games for Week {currentWeek?.week_number}
+                  </button>
+                  <button
+                    onClick={handleUpdateLiveScores}
+                    className="px-4 py-3 bg-red-600 text-white rounded hover:bg-red-700 text-center"
+                  >
+                    Update Live Scores from ESPN
+                  </button>
+                  <button
+                    onClick={handleTestWeekDetection}
+                    className="px-4 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 text-center"
+                  >
+                    Test Week Detection
+                  </button>
+                </div>
+                <button
+                  onClick={handleUpdateCurrentWeek}
+                  className="px-4 py-3 bg-orange-600 text-white rounded hover:bg-orange-700 w-full mb-4"
+                >
+                  Update to Detected Week
+                </button>
+                <p className="text-sm text-gray-600">
+                  Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow border">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold">Pick Management</h2>
+              </div>
+              <div className="p-4">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleSetPickDeadline}
+                      className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700"
+                    >
+                      Set Pick Deadline
+                    </button>
+                    {currentWeek?.pick_deadline && (
+                      <button
+                        onClick={handleClearPickDeadline}
+                        className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                      >
+                        Clear Deadline
+                      </button>
+                    )}
+                  </div>
+                  {currentWeek?.pick_deadline && (
+                    <div className="text-sm">
+                      <span className={`font-medium ${arePicksLocked() ? 'text-red-600' : 'text-green-600'}`}>
+                        Current Deadline: {new Date(currentWeek.pick_deadline).toLocaleString()}
+                        {arePicksLocked() && ' (LOCKED)'}
+                      </span>
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-600">
+                    Manage pick deadlines and game locking for the current week
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {currentWeek && (
+              <div className="bg-white rounded-lg shadow border">
+                <div className="p-4 border-b border-gray-200">
+                  <h2 className="text-lg font-semibold">Current Week Status</h2>
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {currentWeek.week_number}
+                      </div>
+                      <div className="text-sm text-gray-600">Week Number</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">
+                        {games.length}
+                      </div>
+                      <div className="text-sm text-gray-600">Games Loaded</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {currentWeek.tease_points || 14}
+                      </div>
+                      <div className="text-sm text-gray-600">Tease Points</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
