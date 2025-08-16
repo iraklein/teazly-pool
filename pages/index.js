@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
-import { autoSyncNFLSchedule, clearAllGames } from '../lib/loadGames';
+import { autoSyncNFLSchedule } from '../lib/loadGames';
 
 const TeazlyPool = () => {
   const router = useRouter();
@@ -141,8 +141,8 @@ useEffect(() => {
         const result = await autoSyncNFLSchedule();
         
         // If games were updated and we're viewing current week, refresh the display
-        if (result.totalUpdated > 0 && currentWeek) {
-          console.log(`🔄 Auto-sync updated ${result.totalUpdated} games, refreshing current week display`);
+        if ((result.totalUpdated > 0 || result.oddsUpdated > 0) && currentWeek) {
+          console.log(`🔄 Auto-sync updated ${result.totalUpdated} games + ${result.oddsUpdated} odds, refreshing current week display`);
           await loadGames(currentWeek.week_number);
         }
       } catch (error) {
@@ -165,27 +165,6 @@ useEffect(() => {
   };
 }, [user, currentWeek]); // Depend on user and currentWeek
 
-const handleClearAllGames = async () => {
-  const confirmed = confirm('⚠️  This will DELETE ALL GAMES from the database! The auto-sync system will repopulate them automatically within 5 minutes. This will fix any duplicates. Are you sure?');
-  if (!confirmed) return;
-  
-  const doubleConfirm = confirm('🚨 FINAL WARNING: This will permanently delete all game data. Auto-sync will rebuild it. Continue?');
-  if (!doubleConfirm) return;
-  
-  try {
-    await clearAllGames();
-    
-    // Reload current week games (will be empty until auto-sync runs)
-    if (currentWeek) {
-      await loadGames(currentWeek.week_number);
-    }
-    
-    alert('✅ All games cleared! Auto-sync will repopulate clean data within 5 minutes.');
-  } catch (error) {
-    console.error('Error clearing games:', error);
-    alert(`Error clearing games: ${error.message}`);
-  }
-};
   
   // Handle URL routing
   useEffect(() => {
@@ -1485,12 +1464,6 @@ const handleClearAllGames = async () => {
                   className="px-4 py-3 bg-orange-600 text-white rounded hover:bg-orange-700 w-full mb-4"
                 >
                   Update to Detected Week
-                </button>
-                <button
-                  onClick={handleClearAllGames}
-                  className="px-4 py-3 bg-red-600 text-white rounded hover:bg-red-700 w-full mb-4"
-                >
-                  🗑️ Clear All Games (Fix Duplicates)
                 </button>
                 <p className="text-sm text-gray-600">
                   Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
