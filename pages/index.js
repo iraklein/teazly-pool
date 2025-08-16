@@ -130,7 +130,35 @@ const getCurrentNFLWeek = () => {
   };
 };
 
-
+// Temporary function to set current week
+const setCurrentWeekManually = async () => {
+  try {
+    // Set all weeks to not current
+    await supabase
+      .from('weeks')
+      .update({ is_current: false })
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    
+    // Set week 2, season_type 1 to current
+    const { error } = await supabase
+      .from('weeks')
+      .update({ is_current: true })
+      .eq('week_number', 2)
+      .eq('season_type', 1);
+    
+    if (error) {
+      console.error('Error setting current week:', error);
+      return;
+    }
+    
+    // Reload current week
+    await loadCurrentWeek();
+    
+    alert('✅ Set to Preseason Week 2');
+  } catch (error) {
+    console.error('Error:', error);
+  }
+};
 
 // Smart polling system with different intervals
 useEffect(() => {
@@ -1157,11 +1185,7 @@ useEffect(() => {
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
-                  {currentWeek ? 
-                    (currentWeek.season_type === 1 ? `Preseason Week ${currentWeek.week_number}` : 
-                     currentWeek.season_type === 2 ? `Week ${currentWeek.week_number}` : 
-                     `Week ${currentWeek.week_number}`) 
-                    : 'N/A'}
+                  Preseason Week {currentWeek?.week_number || 'N/A'}
                 </h2>
               </div>
               
@@ -1370,11 +1394,7 @@ useEffect(() => {
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
-                  {currentWeek ? 
-                    (currentWeek.season_type === 1 ? `Preseason Week ${currentWeek.week_number}` : 
-                     currentWeek.season_type === 2 ? `Week ${currentWeek.week_number}` : 
-                     `Week ${currentWeek.week_number}`) 
-                    : 'N/A'} - Live Scoring
+                  Preseason Week {currentWeek?.week_number || 'N/A'} - Live Scoring
                 </h2>
               </div>
               <div className="p-4">
@@ -1519,6 +1539,12 @@ useEffect(() => {
                 <h2 className="text-lg font-semibold">Game Management</h2>
               </div>
               <div className="p-4">
+                <button
+                  onClick={setCurrentWeekManually}
+                  className="px-4 py-3 bg-red-600 text-white rounded hover:bg-red-700 w-full mb-4"
+                >
+                  EMERGENCY: Set to Preseason Week 2
+                </button>
                 <p className="text-sm text-gray-600">
                   Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
                   <br />
