@@ -1525,6 +1525,12 @@ useEffect(() => {
                     Test Week Detection
                   </button>
                 </div>
+                <button
+                  onClick={handleUpdateCurrentWeek}
+                  className="px-4 py-3 bg-orange-600 text-white rounded hover:bg-orange-700 w-full mb-4"
+                >
+                  Update to Detected Week (Temporary Fix)
+                </button>
                 <p className="text-sm text-gray-600">
                   Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
                   <br />
