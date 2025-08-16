@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '../lib/supabase';
-import { updateLiveScores, autoSyncNFLSchedule } from '../lib/loadGames';
+import { updateLiveScores, autoSyncNFLSchedule, standardizeExistingTeamNames } from '../lib/loadGames';
 
 const TeazlyPool = () => {
   const router = useRouter();
@@ -180,6 +180,25 @@ useEffect(() => {
     }
   };
 }, [user, currentWeek]); // Depend on user and currentWeek
+
+const handleStandardizeTeamNames = async () => {
+  const confirmed = confirm('This will standardize all team names in the database to use short abbreviations (e.g., "Pittsburgh Steelers" → "PIT"). Continue?');
+  if (!confirmed) return;
+  
+  try {
+    const result = await standardizeExistingTeamNames();
+    
+    // Reload current week games to see changes
+    if (currentWeek) {
+      await loadGames(currentWeek.week_number);
+    }
+    
+    alert(`Team names standardized! ${result.updated} games updated.`);
+  } catch (error) {
+    console.error('Error standardizing team names:', error);
+    alert(`Error standardizing team names: ${error.message}`);
+  }
+};
   
   // Handle URL routing
   useEffect(() => {
@@ -329,11 +348,30 @@ useEffect(() => {
           }
         }
         
+        // Standardize team names (The Odds API usually returns abbreviations, but let's be safe)
+        const standardizeTeamName = (name) => {
+          if (!name) return name;
+          // Common mapping for The Odds API variations
+          const nameMap = {
+            'Las Vegas Raiders': 'LV',
+            'Los Angeles Rams': 'LAR', 
+            'Los Angeles Chargers': 'LAC',
+            'New York Giants': 'NYG',
+            'New York Jets': 'NYJ',
+            'New England Patriots': 'NE',
+            'San Francisco 49ers': 'SF',
+            'Tampa Bay Buccaneers': 'TB',
+            'Green Bay Packers': 'GB',
+            'Kansas City Chiefs': 'KC'
+          };
+          return nameMap[name] || name;
+        };
+
         return {
           id: game.id,
           week_number: weekNumber,
-          home_team: game.home_team,
-          away_team: game.away_team,
+          home_team: standardizeTeamName(game.home_team),
+          away_team: standardizeTeamName(game.away_team),
           spread: spread,
           game_date: roundToNormalGameTime(game.commence_time),
           status: 'upcoming',
@@ -1508,6 +1546,12 @@ useEffect(() => {
                   className="px-4 py-3 bg-orange-600 text-white rounded hover:bg-orange-700 w-full mb-4"
                 >
                   Update to Detected Week
+                </button>
+                <button
+                  onClick={handleStandardizeTeamNames}
+                  className="px-4 py-3 bg-indigo-600 text-white rounded hover:bg-indigo-700 w-full mb-4"
+                >
+                  Standardize Team Names (One-time Fix)
                 </button>
                 <p className="text-sm text-gray-600">
                   Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
