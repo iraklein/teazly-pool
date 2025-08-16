@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Next.js build output
+.next/
+out/
+
+# Production builds
+build/
+dist/
+
+# Environment variables
+.env*.local
+
+# Cache
+.cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

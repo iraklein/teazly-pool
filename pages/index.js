@@ -1357,40 +1357,70 @@ const handleUpdateLiveScores = async () => {
               </div>
               <div className="p-4">
                 <div className="space-y-4">
-                  {games.map((game) => (
-                    <div key={game.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <div className="font-medium">{game.away_team} @ {game.home_team}</div>
-                        <div className={`px-2 py-1 rounded text-sm ${
-                          game.status === 'final' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'
-                        }`}>
-                          {game.status.toUpperCase()}
+                  {games.map((game) => {
+                    const gameTime = new Date(game.game_date);
+                    const now = new Date();
+                    const hasStarted = now > gameTime;
+                    const hasScores = game.home_score !== null && game.away_score !== null;
+                    
+                    return (
+                      <div key={game.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <div className="font-medium">{game.away_team} @ {game.home_team}</div>
+                          <div className="text-right">
+                            {!hasStarted ? (
+                              <div className="text-sm text-gray-600">
+                                {gameTime.toLocaleDateString('en-US', { 
+                                  weekday: 'short', 
+                                  month: 'short', 
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  timeZoneName: 'short'
+                                })}
+                              </div>
+                            ) : (
+                              <div className={`px-2 py-1 rounded text-sm ${
+                                game.status === 'final' ? 'bg-gray-100 text-gray-800' : 
+                                hasStarted ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {game.status.toUpperCase()}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
                       
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">{game.away_score || '-'}</div>
-                          <div className="font-medium">{game.away_team}</div>
-                          <div className="text-sm text-gray-600">
-                            +{getTeaseSpread(game.away_team, game)} (teased)
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold">
+                              {hasStarted && hasScores ? game.away_score : '-'}
+                            </div>
+                            <div className="font-medium">{game.away_team}</div>
+                            <div className="text-sm text-gray-600">
+                              +{getTeaseSpread(game.away_team, game)} (teased)
+                            </div>
+                            {hasStarted && hasScores && (
+                              <div className="text-sm font-medium">
+                                Teased Score: {game.away_score + getTeaseSpread(game.away_team, game)}
+                              </div>
+                            )}
                           </div>
-                          <div className="text-sm font-medium">
-                            Teased Score: {game.away_score ? game.away_score + getTeaseSpread(game.away_team, game) : '-'}
+                          
+                          <div className="text-center">
+                            <div className="text-2xl font-bold">
+                              {hasStarted && hasScores ? game.home_score : '-'}
+                            </div>
+                            <div className="font-medium">{game.home_team}</div>
+                            <div className="text-sm text-gray-600">
+                              {getTeaseSpread(game.home_team, game) > 0 ? '+' : ''}{getTeaseSpread(game.home_team, game)} (teased)
+                            </div>
+                            {hasStarted && hasScores && (
+                              <div className="text-sm font-medium">
+                                Teased Score: {game.home_score + getTeaseSpread(game.home_team, game)}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        
-                        <div className="text-center">
-                          <div className="text-2xl font-bold">{game.home_score || '-'}</div>
-                          <div className="font-medium">{game.home_team}</div>
-                          <div className="text-sm text-gray-600">
-                            {getTeaseSpread(game.home_team, game) > 0 ? '+' : ''}{getTeaseSpread(game.home_team, game)} (teased)
-                          </div>
-                          <div className="text-sm font-medium">
-                            Teased Score: {game.home_score ? game.home_score + getTeaseSpread(game.home_team, game) : '-'}
-                          </div>
-                        </div>
-                      </div>
                       
                       <div className="mt-3 pt-3 border-t border-gray-100">
                         <div className="text-sm text-gray-600 mb-2">
@@ -1433,10 +1463,11 @@ const handleUpdateLiveScores = async () => {
                               );
                             })}
                           </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
