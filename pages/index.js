@@ -31,6 +31,34 @@ const TeazlyPool = () => {
     return date.toISOString();
   };
 
+  // Helper function to format game status for display
+  const formatGameStatus = (game) => {
+    if (!game.status) return 'UPCOMING';
+    
+    const status = game.status.toLowerCase();
+    
+    switch (status) {
+      case 'status_final':
+      case 'final':
+        return 'FINAL';
+      case 'in_progress':
+      case 'live':
+        // For live games, show quarter and time if available
+        if (game.quarter && game.clock) {
+          return `Q${game.quarter} - ${game.clock}`;
+        } else if (game.quarter) {
+          return `Q${game.quarter}`;
+        }
+        return 'LIVE';
+      case 'halftime':
+        return 'HALFTIME';
+      case 'overtime':
+        return 'OVERTIME';
+      default:
+        return status.replace(/_/g, ' ').toUpperCase();
+    }
+  };
+
 // NFL Calendar Configuration - Step 1: Read-only detection
 const NFL_CALENDAR_2025 = {
   preseason: {
@@ -1383,10 +1411,10 @@ useEffect(() => {
                               </div>
                             ) : (
                               <div className={`px-2 py-1 rounded text-sm ${
-                                game.status === 'final' ? 'bg-gray-100 text-gray-800' : 
+                                game.status === 'final' || game.status === 'status_final' ? 'bg-gray-100 text-gray-800' : 
                                 hasStarted ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
                               }`}>
-                                {game.status.toUpperCase()}
+                                {formatGameStatus(game)}
                               </div>
                             )}
                           </div>
