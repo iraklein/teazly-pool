@@ -130,52 +130,6 @@ const getCurrentNFLWeek = () => {
   };
 };
 
-// Step 1: Test function - just shows what week it detects
-const handleTestWeekDetection = () => {
-  const detectedWeek = getCurrentNFLWeek();
-  alert(`Detected: ${detectedWeek.week_name} (${detectedWeek.season_type} week ${detectedWeek.week_number})\nAuto-detected: ${detectedWeek.detected}`);
-};
-
-// Step 3: Simple function to just toggle is_current
-const handleUpdateCurrentWeek = async () => {
-  try {
-    const detectedWeek = getCurrentNFLWeek();
-    console.log('Updating current week to:', detectedWeek);
-    
-    // Set all weeks to not current
-    await supabase
-      .from('weeks')
-      .update({ is_current: false })
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    
-    // Set the detected week to current
-    const { error } = await supabase
-      .from('weeks')
-      .update({ is_current: true })
-      .eq('week_number', detectedWeek.week_number)
-      .eq('season_type', detectedWeek.season_type);
-    
-    if (error) {
-      console.error('Error updating current week:', error);
-      alert(`Error: ${error.message}`);
-      return;
-    }
-    
-    // Reload the page data
-    await loadCurrentWeek();
-    
-    // Force reload games for the new week
-    setTimeout(() => {
-      loadGames(detectedWeek.week_number);
-    }, 500);
-    
-    alert(`✅ Updated current week to: ${detectedWeek.week_name}`);
-    
-  } catch (error) {
-    console.error('Error in handleUpdateCurrentWeek:', error);
-    alert(`Error: ${error.message}`);
-  }
-};
 
 
 // Smart polling system with different intervals
@@ -1203,7 +1157,11 @@ useEffect(() => {
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold">
-                  {currentWeek?.week_name || `Week ${currentWeek?.week_number || 'N/A'}`}
+                  {currentWeek ? 
+                    (currentWeek.season_type === 1 ? `Preseason Week ${currentWeek.week_number}` : 
+                     currentWeek.season_type === 2 ? `Week ${currentWeek.week_number}` : 
+                     `Week ${currentWeek.week_number}`) 
+                    : 'N/A'}
                 </h2>
               </div>
               
@@ -1411,7 +1369,13 @@ useEffect(() => {
 
             <div className="bg-white rounded-lg shadow border">
               <div className="p-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold">Week {currentWeek?.week_number || 'N/A'} - Live Scoring</h2>
+                <h2 className="text-lg font-semibold">
+                  {currentWeek ? 
+                    (currentWeek.season_type === 1 ? `Preseason Week ${currentWeek.week_number}` : 
+                     currentWeek.season_type === 2 ? `Week ${currentWeek.week_number}` : 
+                     `Week ${currentWeek.week_number}`) 
+                    : 'N/A'} - Live Scoring
+                </h2>
               </div>
               <div className="p-4">
                 <div className="space-y-4">
@@ -1555,20 +1519,6 @@ useEffect(() => {
                 <h2 className="text-lg font-semibold">Game Management</h2>
               </div>
               <div className="p-4">
-                <div className="grid grid-cols-1 gap-4 mb-6">
-                  <button
-                    onClick={handleTestWeekDetection}
-                    className="px-4 py-3 bg-purple-600 text-white rounded hover:bg-purple-700 text-center"
-                  >
-                    Test Week Detection
-                  </button>
-                </div>
-                <button
-                  onClick={handleUpdateCurrentWeek}
-                  className="px-4 py-3 bg-orange-600 text-white rounded hover:bg-orange-700 w-full mb-4"
-                >
-                  Update to Detected Week (Temporary Fix)
-                </button>
                 <p className="text-sm text-gray-600">
                   Game Management: {games.length} games currently loaded for week {currentWeek?.week_number}
                   <br />
