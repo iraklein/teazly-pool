@@ -1,4 +1,4 @@
-// Add this as: pages/admin.js
+// Add this as: pages/admin.js t
 
 import { useState } from 'react';
 import { loadNFLGames, ensureCurrentWeek, initializeGames } from '../lib/loadGames';
